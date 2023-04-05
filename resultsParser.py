@@ -6,48 +6,46 @@ import plotly.express as px
 import os
 import seaborn as sns
 
-DISCOUNT_RATE = 0.1
+DISCOUNT_RATE = 0.05
+INPUT_PATH = Path("resultsFiles/mar6_2023")
+CONTROLLER_PATH = INPUT_PATH / "results_controller"
+CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
+CARB_PATH = INPUT_PATH / "carb_results"
+FIGURES_PATH = INPUT_PATH / "figures"
+EMISSIONS_RESULT_STRING = "One_Hundred Year GWP Direct At Point of Emissions"
+
 
 
 def main():
-    input_path = Path("resultsFiles/mar6_2023")
 
-    # folder to store combined csv of all results
-    csv_path = input_path / Path('combinedCSV')
-    csv_path.mkdir(parents=True, exist_ok=True)
+    df = load_data(reload=False)
+    scenario_comparisons = load_sce_comps()
+    scenario_color_map, egen_resource_color_map, sector_color_map = load_color_maps()
+    graph_params = {
+        'scenario_comparisons': scenario_comparisons,
+        'scenario_color_map': scenario_color_map,
+        'egen_resource_color_map': egen_resource_color_map,
+        'sector_color_map': sector_color_map
+    }
+    figs = []
+    figs = emissions_over_time_graph(figs, df, graph_params)
+    # figs = plot_marginal_emissions_overtime (figs, df, graph_params)
 
-    # folder to store graphs created
-    figures_path = input_path / Path('figures')
-    figures_path.mkdir(parents=True, exist_ok=True)
 
-    reload = True
+def load_data(reload):
+    """ Function to load either raw or already cleaned LEAP data"""
     if reload:
-        df = load_all_files(input_path)
+        df = load_all_files(INPUT_PATH)
         df = reformat(df)
-        df.to_csv(csv_path / 'combined_results.csv')
+        df.to_csv(CLEAN_RESULTS_PATH / 'combined_results.csv')
     else:
-        df = pd.read_csv(csv_path / 'combined_results.csv', header=0, index_col=0)
+        df = pd.read_csv(CLEAN_RESULTS_PATH / 'combined_results.csv', header=0, index_col=0)
 
-    # scenarios = df.loc[:, "Scenario"].unique().tolist()
-    #
-    # scenario_comparisons = [
-    #     [s for s in scenarios if ("Baseline" in s) or ("CARB" in s)],
-    #     [s for s in scenarios if ("Baseline" in s) or ("CARB" in s) or ("_0_" in s)],
-    #     [s for s in scenarios if "Baseline" in s],
-    #     [s for s in scenarios if "CARB" in s],
-    #     [s for s in scenarios if ("CARB" in s) or ("_0_" in s)],
-    #     [s for s in scenarios if "High Elec" in s] + ["Stanford Baseline_0_NA"],
-    #     [s for s in scenarios if "High Biofuels" in s] + ["Stanford Baseline_0_NA"],
-    #     [s for s in scenarios if "High CCS" in s] + ["Stanford Baseline_0_NA"],
-    #     [s for s in scenarios if "High H2" in s] + ["Stanford Baseline_0_NA"],
-    # ]
-    # emissions_cost_v_time(df, figures_path, scenario_comparisons)
-    # # cost_v_emissions(df, figures_path, scenario_comparisons)
-    # # emissions_makeup_v_time(df, figures_path)
-    # # energy_demand(df, figures_path)
+    return df
 
 
 def load_all_files(input_path):
+    """ function to intake all raw results files within the specified path """
     df = pd.DataFrame
     added_scenarios = set()
     i = 0
@@ -56,28 +54,21 @@ def load_all_files(input_path):
         if os.path.isfile(f) and (fname[0] not in [".", "~"]):
             df_excel = pd.read_excel(f, sheet_name="Results")
 
-            # ensure that the same scenario doesn't get added multiple times
-            # eg: if baseline gets run multiple times and has results in multiple excel files
-            row_ids = [i for i, sce in enumerate(df_excel.loc[:, "Scenario"]) if sce not in added_scenarios]
+            # exclude scenarios that have already been added
+            # eg: if baseline is included in multiple results files, only add it once
+            row_ids = [i for i, sce in enumerate(df_excel["Scenario"]) if sce not in added_scenarios]
             if i == 0:
                 df = df_excel.iloc[row_ids, :].copy()
             else:
                 df = pd.concat([df, df_excel.iloc[row_ids, :].copy()], sort=True)
-            added_scenarios = set(df.loc[:, "Scenario"].unique())
+            added_scenarios = set(df["Scenario"].unique())
             i += 1
 
     return df
 
 
 def reformat(df_excel):
-    """
-    Function to take LEAP script output and convert it to long dataframe
-    Dataframe indices are years 2018-2045 and columns contain both id and results cols
-        id cols - Scenario, Result Variable, Fuel
-        result cols - each branch output
-    :param f - file path:
-    :return: dataframe of results
-    """
+    """ Function to take LEAP script output and convert it to cleaned up long dataframe """
     df_excel = df_excel.drop(columns=["Index"])
     df_excel = df_excel.transpose()
 
@@ -124,8 +115,85 @@ def reformat(df_excel):
         # append new dataframe to dataframe that will ultimately be returned
         df = pd.concat([df, df_new], sort=True)
 
+    # organize columns
+    df.reset_index(inplace=True)
+    df.rename({'index' : 'Year'}, axis=1, inplace=True)
+    id_cols = ['Year'] + id_cols
+    cols = id_cols + list(set(df.columns) - set(id_cols))
+    df = df[cols]
+
     return df.fillna(0)
 
+
+def load_sce_comps():
+    """ Function to load scenario comparisons as dictated in controller """
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="base_plot_groups")
+    short_sce_comps = []
+    long_sce_comps = []
+    custom_sce_comps = []
+    for _, dfg in df.groupby('Group'):
+        if dfg['Naming'].unique()[0] == 'short':
+            short_sce_comps.append(dfg['Scenario'].tolist())
+        elif dfg['Naming'].unique()[0] == 'long':
+            long_sce_comps.append(dfg['Scenario'].tolist())
+        else:
+            custom_sce_comps.append(dfg['Scenario'].tolist())
+
+    return {
+        "short": short_sce_comps,
+        "long": long_sce_comps,
+        "custom": custom_sce_comps,
+    }
+
+
+def load_color_maps():
+    """ Function to load color maps from controller """
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="scenario_colors", index_col=0)
+    sce_color_map = df.to_dict()['Color']
+
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="egen_resource_colors", index_col=0)
+    egen_resource_color_map = {
+        'long': df[df['Length'] == 'Long'].to_dict()['Color'],
+        'short': df[df['Length'] == 'Short'].to_dict()['Color'],
+    }
+
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="sector_colors", index_col=0)
+    sector_color_map = df.to_dict()['Color']
+
+    return sce_color_map, egen_resource_color_map, sector_color_map
+
+
+def calculate_annual_result(df_in, result_str):
+    """ Function to calculate annual result summed across branches for all scenarios """
+    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
+    result_cols = list(set(df_in.columns) - set(id_cols))
+
+    df_out = pd.DataFrame(columns=['Year', 'Scenario', 'Value'])
+    for key, dfg in df_in[df_in['Result Variable'] == result_str].groupby(by=['Year', 'Scenario']):
+        mask = np.array(
+            (dfg['Year'] == key[0]) &
+            (dfg['Scenario'] == key[1])
+        )
+        row_ids = list(np.where(mask)[0])
+        value = dfg[result_cols].iloc[row_ids].sum(axis=1).sum()
+        df_out.loc[len(df_out.index)] = [key[0], key[1], value]
+
+    return df_out
+
+
+def emissions_over_time_graph(figs, df_in, graph_params):
+    df = calculate_annual_result(df_in, result_str=EMISSIONS_RESULT_STRING)
+
+    for sce_comps in graph_params['scenario_comparisons']['short']:
+        df_graph = df[df['Scenario'].isin(sce_comps)]
+        df_graph['Name'] = df_graph['Scenario'].str.split(pat="_", expand=True)[0]
+        print("hello")
+
+    return figs
+
+
+def get_custom_scenario_names(scenarios):
+    pass
 
 def emissions_cost_v_time(df, output_path, comparisons, relative_to="Stanford Baseline_0_NA"):
     id_cols = ['Scenario', 'Result Variable', 'Fuel']
@@ -316,4 +384,6 @@ def energy_demand(df, output_path):
 
 
 if __name__ == "__main__":
+    CLEAN_RESULTS_PATH.mkdir(parents=True, exist_ok=True)
+    FIGURES_PATH.mkdir(parents=True, exist_ok=True)
     main()
