@@ -5,6 +5,9 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import os
+from PyPDF2 import PdfMerger
+from matplotlib.backends.backend_pdf import PdfPages
+
 import seaborn as sns
 
 DISCOUNT_RATE = 0.05
@@ -14,6 +17,7 @@ CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 CARB_PATH = INPUT_PATH / "carb_results"
 FIGURES_PATH = INPUT_PATH / "figures"
 EMISSIONS_RESULT_STRING = "One_Hundred Year GWP Direct At Point of Emissions"
+COST_RESULT_STRING = "Social Costs"
 
 
 
@@ -22,9 +26,8 @@ def main():
     df = load_data(reload=False)
     scenario_comparisons = load_sce_comps()
     egen_resource_color_map, sector_color_map = load_color_maps()
-    figs = []
-    figs = graph_emissions_over_time_scenario_comparisons(figs, df, scenario_comparisons)
-    # figs = plot_marginal_emissions_overtime (figs, df, graph_params)
+    graph_emissions_over_time_scenario_comparisons(df, scenario_comparisons)
+    graph_marginal_cost_over_time_scenario_comparisons(df, scenario_comparisons)
 
 
 def load_data(reload):
@@ -171,7 +174,31 @@ def calculate_annual_result_by_subgroup(df_in, result_str, subgroup_dict):
     return df_out
 
 
-def graph_emissions_over_time_scenario_comparisons(figs, df_in, graph_params):
+def marginalize_it(df, relative_to):
+    for subg, yr in itertools.product(df['Subgroup'].unique(), df['Year'].unique()):
+        # create mask for values in the relative_to scenario
+        relative_to_mask = np.array(
+            (df['Scenario'] == relative_to) &
+            (df['Subgroup'] == subg) &
+            (df['Year'] == yr)
+        )
+        relative_to_ids = list(np.where(relative_to_mask)[0])
+
+        # create mask for the values that are being marginalized
+        marginalize_mask = np.array(
+            (df['Subgroup'] == subg) &
+            (df['Year'] == yr)
+        )
+        marginalize_ids = list(np.where(marginalize_mask)[0])
+
+        df.iloc[marginalize_ids, df.columns.get_loc('Value')] -= float(
+            df.iloc[relative_to_ids, df.columns.get_loc('Value')])
+
+    return df
+
+
+
+def graph_emissions_over_time_scenario_comparisons(df_in, scenario_comparisons):
     id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
     result_cols = list(set(df_in.columns) - set(id_cols))
     subgroup_dict = {
@@ -179,26 +206,75 @@ def graph_emissions_over_time_scenario_comparisons(figs, df_in, graph_params):
     }
 
     df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
+    df['Value'] = df['Value'] / 1e6
 
-    for sce_comps in graph_params['scenario_comparisons']['short']:
-        df_graph = df[df['Scenario'].isin(sce_comps)]
-        df_graph['name'] = df_graph['Scenario'].str.split(pat="_", expand=True)[0]
-        df_graph['line'] = df_graph['Scenario'].str.split(pat="_", expand=True)[1].astype('int')
-        df_graph['show_legend'] = True
-        df_graph['show_legend'][df_graph['line'] != 0] = False
-        figs.append(plot_line_scenario_comparison_over_time(df_graph))
+    for i, sc in enumerate(scenario_comparisons):
+        fig = plot_line_scenario_comparison_over_time(
+            df, 'Scenario Emissions', 'Annual Emissions (Mt CO2e)', '', sc,
+        )
 
-    return figs
+        fig.write_image(FIGURES_PATH / f"emissions_comparison_{i}.pdf")
 
 
-def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, color_dict, dash_dict):
+def graph_marginal_cost_over_time_scenario_comparisons(df_in, scenario_comparisons, relative_to='LEAP Version CARB Reference_0_nan'):
+    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
+    result_cols = list(set(df_in.columns) - set(id_cols))
+    subgroup_dict = {
+        'all_branches': result_cols,
+    }
+
+    df = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, subgroup_dict)
+    df = marginalize_it(df, relative_to)
+    df['Value'] = df['Value'] / 1e9
+
+    for i, sc in enumerate(scenario_comparisons):
+        fig = plot_line_scenario_comparison_over_time(
+            df, 'Scenario Marginal Costs', '$/yr (Billion)', '', sc,
+        )
+
+        fig.write_image(FIGURES_PATH / f"cost_comparison_{i}.pdf")
+
+
+def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, sce_comp):
     fig = go.Figure()
 
-    for _, dfg in df.groupby('Scenario'):
-        col = color_dict[df['S']]
+    for sce in sce_comp['scenarios']:
+        df_sce = df[df['Scenario'] == sce].copy()
+        fig.add_trace(go.Scatter(
+            mode='lines',
+            x=df_sce['Year'],
+            y=df_sce['Value'],
+            name=sce_comp['name_map'][sce],
+            showlegend=sce_comp['legend_map'][sce],
+            line=dict(
+                color=sce_comp['color_map'][sce],
+                dash=sce_comp['line_map'][sce],
+            ),
 
-def get_custom_scenario_names(scenarios):
-    pass
+        ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title=xaxis_title,
+        yaxis_title=yaxis_title,
+        autosize=False,
+        width=800,
+        height=500,
+        legend=dict(
+            orientation='h',
+            yanchor='top',
+            y=-0.08,
+            xanchor='left',
+            x=0,
+        )
+    )
+
+    fig.update_yaxes(automargin=True)
+    fig.update_xaxes(automargin=True)
+
+    return fig
+
+
 
 def emissions_cost_v_time(df, output_path, comparisons, relative_to="Stanford Baseline_0_NA"):
     id_cols = ['Scenario', 'Result Variable', 'Fuel']
