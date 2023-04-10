@@ -3,6 +3,7 @@ import itertools
 from pathlib import Path
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import os
 import seaborn as sns
 
@@ -20,15 +21,9 @@ def main():
 
     df = load_data(reload=False)
     scenario_comparisons = load_sce_comps()
-    scenario_color_map, egen_resource_color_map, sector_color_map = load_color_maps()
-    graph_params = {
-        'scenario_comparisons': scenario_comparisons,
-        'scenario_color_map': scenario_color_map,
-        'egen_resource_color_map': egen_resource_color_map,
-        'sector_color_map': sector_color_map
-    }
+    egen_resource_color_map, sector_color_map = load_color_maps()
     figs = []
-    figs = emissions_over_time_graph(figs, df, graph_params)
+    figs = graph_emissions_over_time_scenario_comparisons(figs, df, scenario_comparisons)
     # figs = plot_marginal_emissions_overtime (figs, df, graph_params)
 
 
@@ -127,29 +122,24 @@ def reformat(df_excel):
 
 def load_sce_comps():
     """ Function to load scenario comparisons as dictated in controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="base_plot_groups")
-    short_sce_comps = []
-    long_sce_comps = []
-    custom_sce_comps = []
-    for _, dfg in df.groupby('Group'):
-        if dfg['Naming'].unique()[0] == 'short':
-            short_sce_comps.append(dfg['Scenario'].tolist())
-        elif dfg['Naming'].unique()[0] == 'long':
-            long_sce_comps.append(dfg['Scenario'].tolist())
-        else:
-            custom_sce_comps.append(dfg['Scenario'].tolist())
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="base_scenario_comparisons")
 
-    return {
-        "short": short_sce_comps,
-        "long": long_sce_comps,
-        "custom": custom_sce_comps,
-    }
+    scenario_comps = []
+
+    for _, dfg in df.groupby('Group'):
+        sc = dict()
+        sc['scenarios'] = dfg['Scenario'].tolist()
+        sc['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
+        sc['line_map'] = dict(zip(dfg['Scenario'], dfg['Line']))
+        sc['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
+        sc['legend_map'] = dict(zip(dfg['Scenario'], dfg['Include in legend']))
+        scenario_comps.append(sc)
+
+    return scenario_comps
 
 
 def load_color_maps():
     """ Function to load color maps from controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="scenario_colors", index_col=0)
-    sce_color_map = df.to_dict()['Color']
 
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="egen_resource_colors", index_col=0)
     egen_resource_color_map = {
@@ -160,37 +150,52 @@ def load_color_maps():
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="sector_colors", index_col=0)
     sector_color_map = df.to_dict()['Color']
 
-    return sce_color_map, egen_resource_color_map, sector_color_map
+    return egen_resource_color_map, sector_color_map
 
 
-def calculate_annual_result(df_in, result_str):
-    """ Function to calculate annual result summed across branches for all scenarios """
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
+def calculate_annual_result_by_subgroup(df_in, result_str, subgroup_dict):
+    """ Function to calculate annual result summed branch subgroups for all scenarios """
 
-    df_out = pd.DataFrame(columns=['Year', 'Scenario', 'Value'])
+    df_out = pd.DataFrame(columns=['Year', 'Scenario', 'Subgroup', 'Value'])
     for key, dfg in df_in[df_in['Result Variable'] == result_str].groupby(by=['Year', 'Scenario']):
+        yr, sce = key
         mask = np.array(
-            (dfg['Year'] == key[0]) &
-            (dfg['Scenario'] == key[1])
+            (dfg['Year'] == yr) &
+            (dfg['Scenario'] == sce)
         )
         row_ids = list(np.where(mask)[0])
-        value = dfg[result_cols].iloc[row_ids].sum(axis=1).sum()
-        df_out.loc[len(df_out.index)] = [key[0], key[1], value]
+        for subgroup, branches in subgroup_dict.items():
+            value = dfg[branches].iloc[row_ids].sum(axis=1).sum()
+            df_out.loc[len(df_out.index)] = [yr, sce, subgroup, value]
 
     return df_out
 
 
-def emissions_over_time_graph(figs, df_in, graph_params):
-    df = calculate_annual_result(df_in, result_str=EMISSIONS_RESULT_STRING)
+def graph_emissions_over_time_scenario_comparisons(figs, df_in, graph_params):
+    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
+    result_cols = list(set(df_in.columns) - set(id_cols))
+    subgroup_dict = {
+        'all_branches': result_cols,
+    }
+
+    df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
 
     for sce_comps in graph_params['scenario_comparisons']['short']:
         df_graph = df[df['Scenario'].isin(sce_comps)]
-        df_graph['Name'] = df_graph['Scenario'].str.split(pat="_", expand=True)[0]
-        print("hello")
+        df_graph['name'] = df_graph['Scenario'].str.split(pat="_", expand=True)[0]
+        df_graph['line'] = df_graph['Scenario'].str.split(pat="_", expand=True)[1].astype('int')
+        df_graph['show_legend'] = True
+        df_graph['show_legend'][df_graph['line'] != 0] = False
+        figs.append(plot_line_scenario_comparison_over_time(df_graph))
 
     return figs
 
+
+def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, color_dict, dash_dict):
+    fig = go.Figure()
+
+    for _, dfg in df.groupby('Scenario'):
+        col = color_dict[df['S']]
 
 def get_custom_scenario_names(scenarios):
     pass
