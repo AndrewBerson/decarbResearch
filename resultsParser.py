@@ -26,8 +26,9 @@ def main():
     df = load_data(reload=False)
     scenario_comparisons = load_sce_comps()
     egen_resource_color_map, sector_color_map = load_color_maps()
-    graph_emissions_over_time_scenario_comparisons(df, scenario_comparisons)
-    graph_marginal_cost_over_time_scenario_comparisons(df, scenario_comparisons)
+    # graph_emissions_over_time_scenario_comparisons(df, scenario_comparisons)
+    # graph_marginal_cost_over_time_scenario_comparisons(df, scenario_comparisons)
+    graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(df, scenario_comparisons)
 
 
 def load_data(reload):
@@ -136,6 +137,7 @@ def load_sce_comps():
         sc['line_map'] = dict(zip(dfg['Scenario'], dfg['Line']))
         sc['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
         sc['legend_map'] = dict(zip(dfg['Scenario'], dfg['Include in legend']))
+        sc['marker_map'] = dict(zip(dfg['Scenario'], dfg['Marker']))
         scenario_comps.append(sc)
 
     return scenario_comps
@@ -197,6 +199,37 @@ def marginalize_it(df, relative_to):
     return df
 
 
+def discount_it(df):
+    yrs = np.sort(df['Year'].unique())
+    base_yr = yrs[0]
+
+    # discount all costs
+    for key, dfg in df.groupby(by=['Scenario', 'Subgroup', 'Year']):
+        sce, subg, yr = key
+        mask = np.array(
+            (df['Scenario'] == sce) &
+            (df['Subgroup'] == subg) &
+            (df['Year'] == yr)
+        )
+        ids = list(np.where(mask)[0])
+        df.iloc[ids, df.columns.get_loc('Value')] = dfg['Value'] / (1 + DISCOUNT_RATE) ** (yr - base_yr)
+
+    return df
+
+
+def cumsum_it(df):
+    df = df.sort_values(by='Year', axis=0)
+    for key, dfg in df.groupby(by=['Scenario', 'Subgroup']):
+        sce, subg = key
+        mask = np.array(
+            (df['Scenario'] == sce) &
+            (df['Subgroup'] == subg)
+        )
+        ids = list(np.where(mask)[0])
+        df.iloc[ids, df.columns.get_loc('Value')] = dfg['Value'].cumsum(axis=0)
+
+    return df
+
 
 def graph_emissions_over_time_scenario_comparisons(df_in, scenario_comparisons):
     id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
@@ -235,6 +268,67 @@ def graph_marginal_cost_over_time_scenario_comparisons(df_in, scenario_compariso
         fig.write_image(FIGURES_PATH / f"cost_comparison_{i}.pdf")
 
 
+def evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to='LEAP Version CARB Reference_0_nan'):
+    df_cost = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, subgroup_dict)
+    df_cost = marginalize_it(df_cost, relative_to)
+    df_cost = discount_it(df_cost)
+    df_cost = cumsum_it(df_cost)
+    df_cost = df_cost.rename(columns={'Value': 'cumulative_marginal_cost'})
+
+    df_emissions = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
+    df_emissions = marginalize_it(df_emissions, relative_to)
+    df_emissions = cumsum_it(df_emissions)
+    df_emissions = df_emissions.rename(columns={'Value': 'cumulative_marginal_emissions'})
+
+    df = df_emissions.merge(df_cost, how='outer', on=['Scenario', 'Subgroup', 'Year'])
+
+    return df
+
+
+def graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(df_in, scenario_comparisons, relative_to='LEAP Version CARB Reference_0_nan'):
+    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
+    result_cols = list(set(df_in.columns) - set(id_cols))
+    subgroup_dict = {
+        'all_branches': result_cols,
+    }
+
+    df = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to)
+    df = df[df['Year'] == df['Year'].max()].copy()
+    df['cumulative_marginal_cost'] = df['cumulative_marginal_cost'] / 1e9
+    df['cumulative_marginal_abated_emissions'] = -1 * df['cumulative_marginal_emissions'] / 1e9
+    df = df.rename(columns={
+        'cumulative_marginal_cost': 'yval',
+        'cumulative_marginal_abated_emissions': 'xval'
+    })
+
+    for i, sc in enumerate(scenario_comparisons):
+        fig = plot_scatter_scenario_comparison(
+            df, 'Emissions vs Cost', 'Marginal Abated Emissions (Gt CO2e)', 'Marginal Cost ($B)', sc,
+        )
+        fig.write_image(FIGURES_PATH / f"emissions_v_cost_{i}.pdf")
+
+
+def plot_scatter_scenario_comparison(df, title, xaxis_title, yaxis_title, sce_comp):
+    fig = go.Figure()
+
+    for sce in sce_comp['scenarios']:
+        df_sce = df[df['Scenario'] == sce].copy()
+        fig.add_trace(go.Scatter(
+            mode='markers',
+            x=df_sce['xval'],
+            y=df_sce['yval'],
+            name=sce_comp['name_map'][sce],
+            showlegend=sce_comp['legend_map'][sce],
+            marker_symbol=sce_comp['marker_map'][sce],
+            marker_color=sce_comp['color_map'][sce],
+        ))
+
+    fig.update_traces(marker={'size': 10})
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_legend_layout(fig, xaxis_title)
+    fig = update_plot_size(fig)
+    return fig
+
 def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, sce_comp):
     fig = go.Figure()
 
@@ -253,25 +347,47 @@ def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title,
 
         ))
 
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_legend_layout(fig, xaxis_title)
+    fig = update_plot_size(fig)
+    return fig
+
+
+def update_titles(fig, title, xaxis_title, yaxis_title):
     fig.update_layout(
         title=title,
         xaxis_title=xaxis_title,
         yaxis_title=yaxis_title,
-        autosize=False,
-        width=800,
-        height=500,
+    )
+    return fig
+
+
+def update_legend_layout(fig, xaxis_title):
+    if xaxis_title == '':
+        y = -.08
+    else:
+        y=-0.2
+
+    fig.update_layout(
         legend=dict(
             orientation='h',
             yanchor='top',
-            y=-0.08,
+            y=y,
             xanchor='left',
             x=0,
         )
     )
+    return fig
 
+
+def update_plot_size(fig):
+    fig.update_layout(
+        autosize=False,
+        width=800,
+        height=500,
+    )
     fig.update_yaxes(automargin=True)
     fig.update_xaxes(automargin=True)
-
     return fig
 
 
