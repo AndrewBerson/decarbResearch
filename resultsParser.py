@@ -28,104 +28,113 @@ def main():
     egen_branch_map_long, egen_branch_map_short = form_egen_branch_maps(df)
     sector_branch_map = form_sector_branch_map(df)
 
-    # Graphs that compare various scenarios
-    df_scenario_comp = df[df['Scenario'].isin(scenarios_to_compare)]
-    graph_emissions_over_time_scenario_comparisons(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-    )
-    graph_marginal_cost_over_time_scenario_comparisons(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-    )
-    graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-    )
-    graph_cost_of_co2_abatement_bar(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-    )
-    graph_egen_by_resource_scenario_comparison(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-        color_map=egen_resource_color_map['long'],
-        branch_map=egen_branch_map_long,
-        file_suffix='long',
-    )
-    graph_egen_by_resource_scenario_comparison(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-        color_map=egen_resource_color_map['short'],
-        branch_map=egen_branch_map_short,
-        file_suffix='short',
-    )
-    graph_cumulative_marginal_costs_by_sector_scenario_comparison(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
-        year=2045,
-        relative_to=RELATIVE_TO,
-    )
-    graph_cumulative_marginal_abated_emissions_by_sector_scenario_comparison(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
-        year=2045,
-        relative_to=RELATIVE_TO,
-    )
-    graph_annual_marginal_abated_emissions_by_sector_scenario_comparison(
-        df_in=df_scenario_comp,
-        scenario_comparisons=scenario_comparison_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
-        year=2045,
-        relative_to=RELATIVE_TO,
-    )
+    # Base scenario comparison graphs
+    # df_scenario_comp = df[df['Scenario'].isin(scenarios_to_compare)]
+    # graph_emissions_over_time_scenario_comparisons(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    # )
+    # graph_marginal_cost_over_time_scenario_comparisons(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    # )
+    # graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    # )
+    # graph_cost_of_co2_abatement_bar(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    # )
+    # graph_egen_by_resource_scenario_comparison(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    #     color_map=egen_resource_color_map['long'],
+    #     branch_map=egen_branch_map_long,
+    #     file_suffix='long',
+    # )
+    # graph_egen_by_resource_scenario_comparison(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    #     color_map=egen_resource_color_map['short'],
+    #     branch_map=egen_branch_map_short,
+    #     file_suffix='short',
+    # )
+    # graph_cumulative_marginal_costs_by_sector_scenario_comparison(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    #     color_map=sector_color_map,
+    #     branch_map=sector_branch_map,
+    #     year=2045,
+    #     relative_to=RELATIVE_TO,
+    # )
+    # graph_cumulative_marginal_abated_emissions_by_sector_scenario_comparison(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    #     color_map=sector_color_map,
+    #     branch_map=sector_branch_map,
+    #     year=2045,
+    #     relative_to=RELATIVE_TO,
+    # )
+    # graph_annual_marginal_abated_emissions_by_sector_scenario_comparison(
+    #     df_in=df_scenario_comp,
+    #     scenario_comparisons=scenario_comparison_params,
+    #     color_map=sector_color_map,
+    #     branch_map=sector_branch_map,
+    #     year=2045,
+    #     relative_to=RELATIVE_TO,
+    # )
 
     # Graphs that only look at one scenario
-    individual_sce_graph_params = load_individual_scenarios()
-    df_individual_scenarios = df[df['Scenario'].isin(individual_sce_graph_params['scenarios'])]
-    graph_marginal_costs_by_sector_over_time(
-        df_in=df_individual_scenarios,
-        individual_sce_graph_params=individual_sce_graph_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
-        relative_to=RELATIVE_TO,
-    )
-    graph_marginal_emissions_by_sector_over_time(
-        df_in=df_individual_scenarios,
-        individual_sce_graph_params=individual_sce_graph_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
-        relative_to=RELATIVE_TO,
-    )
-    graph_emissions_by_sector_over_time(
-        df_in=df_individual_scenarios,
-        individual_sce_graph_params=individual_sce_graph_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
-    )
-    graph_egen_by_resource_over_time(
-        df_in=df_individual_scenarios,
-        individual_sce_graph_params=individual_sce_graph_params,
-        color_map=egen_resource_color_map['short'],
-        branch_map=egen_branch_map_short,
-        suffix='short'
-    )
-    graph_cumulative_egen_capacity_added_over_time(
-        df_in=df_individual_scenarios,
-        individual_sce_graph_params=individual_sce_graph_params,
-        color_map=egen_resource_color_map['short'],
-        branch_map=egen_branch_map_short,
-        suffix='short'
-    )
+    # individual_sce_graph_params = load_individual_scenarios()
+    # df_individual_scenarios = df[df['Scenario'].isin(individual_sce_graph_params['scenarios'])]
+    # graph_marginal_costs_by_sector_over_time(
+    #     df_in=df_individual_scenarios,
+    #     individual_sce_graph_params=individual_sce_graph_params,
+    #     color_map=sector_color_map,
+    #     branch_map=sector_branch_map,
+    #     relative_to=RELATIVE_TO,
+    # )
+    # graph_marginal_emissions_by_sector_over_time(
+    #     df_in=df_individual_scenarios,
+    #     individual_sce_graph_params=individual_sce_graph_params,
+    #     color_map=sector_color_map,
+    #     branch_map=sector_branch_map,
+    #     relative_to=RELATIVE_TO,
+    # )
+    # graph_emissions_by_sector_over_time(
+    #     df_in=df_individual_scenarios,
+    #     individual_sce_graph_params=individual_sce_graph_params,
+    #     color_map=sector_color_map,
+    #     branch_map=sector_branch_map,
+    # )
+    # graph_egen_by_resource_over_time(
+    #     df_in=df_individual_scenarios,
+    #     individual_sce_graph_params=individual_sce_graph_params,
+    #     color_map=egen_resource_color_map['short'],
+    #     branch_map=egen_branch_map_short,
+    #     suffix='short'
+    # )
+    # graph_cumulative_egen_capacity_added_over_time(
+    #     df_in=df_individual_scenarios,
+    #     individual_sce_graph_params=individual_sce_graph_params,
+    #     color_map=egen_resource_color_map['short'],
+    #     branch_map=egen_branch_map_short,
+    #     suffix='short'
+    # )
 
     # Load shape graphs
 
     # RPS graphs
+
+    # Sensitivity graphs
+    tech_choice_scenarios, tech_choice_graph_params = load_tech_choice_graph_params()
+    graph_tech_choice_emissions(
+        df_in=df[df['Scenario'].isin(tech_choice_scenarios)],
+        tech_choice_graph_params=tech_choice_graph_params,
+        year=2045,
+    )
+
 
 def load_data(reload):
     """ Function to load either raw or already cleaned LEAP data"""
@@ -186,7 +195,8 @@ def reformat(df_excel):
             (df_excel.loc['Result Variable', :] == r) &
             (df_excel.loc['Fuel', :] == f)
         )
-        col_ids = [i for i, mask in enumerate(col_mask) if mask]
+        # col_ids = [i for i, mask in enumerate(col_mask) if mask]
+        col_ids = list(np.where(col_mask)[0])
 
         # some scenario, result, fuel combos are null, skip these ones
         if len(col_ids) == 0:
@@ -204,8 +214,6 @@ def reformat(df_excel):
 
         # add back in scenario, result variable, and fuel as columns
         df_new[['Scenario', 'Result Variable', 'Fuel']] = (s, r, f)
-        # df_new.loc[:, 'Result Variable'] = r
-        # df_new.loc[:, 'Fuel'] = f
 
         # make Year its own column
         df_new.reset_index(inplace=True)
@@ -215,8 +223,6 @@ def reformat(df_excel):
         df = pd.concat([df, df_new], sort=True)
 
     # organize columns
-    # df.reset_index(inplace=True)
-    # df.rename({'index' : 'Year'}, axis=1, inplace=True)
     id_cols = ['Year'] + id_cols
     cols = id_cols + list(set(df.columns) - set(id_cols))
     df = df[cols]
@@ -650,6 +656,60 @@ def graph_cumulative_egen_capacity_added_over_time(df_in, individual_sce_graph_p
             include_sum=True,
         )
         fig.write_image(FIGURES_PATH / f"egen_capacity_added_over_time_{suffix}_{i}.pdf")
+
+
+def load_tech_choice_graph_params():
+    """ Function to load scenario comparisons as dictated in controller """
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="tech_choice_plots")
+
+    relevant_scenarios = set()
+    scenario_comp_params = []
+
+    for _, dfg in df.groupby('Plot'):
+        relevant_scenarios.update(set(dfg['Scenario'].unique()))
+        relevant_scenarios.update(set(dfg['relative_to'].unique()))
+        sc = dict()
+        sc['scenarios'] = dfg['Scenario'].tolist()
+        sc['relative_to'] = dfg['relative_to'].unique()[0]
+        sc['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
+        sc['sector_map'] = dict(zip(dfg['Scenario'], dfg['Sector']))
+        sc['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
+        scenario_comp_params.append(sc)
+
+    return list(relevant_scenarios), scenario_comp_params
+
+
+def graph_tech_choice_emissions(df_in, tech_choice_graph_params, year=2045):
+    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
+    result_cols = list(set(df_in.columns) - set(id_cols))
+    subgroup_dict = {
+        'all_branches': result_cols,
+    }
+
+    df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
+    df = df[df['Year'] == year]
+    df = df.reset_index()    # need to reset index for the marginalize_it function to work
+    df['Value'] = -1 * df['Value'] / 1e6
+
+    for i, tc in enumerate(tech_choice_graph_params):
+        df_graph = marginalize_it(df, tc['relative_to'])
+        df_graph = df_graph[df_graph['Scenario'].isin(tc['scenarios'])].copy()
+        df_graph['Sector'] = df_graph['Scenario'].map(tc['sector_map'])
+        df_graph = df_graph.replace({'Scenario': tc['name_map']})
+
+        # todo: fix color map
+        color_map = dict(zip([tc['name_map'][sce] for sce in tc['scenarios']],
+                             [tc['color_map'][sce] for sce in tc['scenarios']]))
+        fig = plot_bar_scenario_comparison(
+            df=df_graph,
+            title='Abated Emissions Contribution',
+            xaxis_title='Mt CO2e',
+            yaxis_title='',
+            color_dict=color_map,
+            color_column='Sector',
+            include_legend=True,
+        )
+        fig.write_image(FIGURES_PATH / f"tech_choice_emissions_{i}.pdf")
 
 
 def form_egen_branch_maps(df):
