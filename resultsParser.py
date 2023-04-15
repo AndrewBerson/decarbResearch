@@ -132,6 +132,7 @@ def main():
     graph_tech_choice_emissions(
         df_in=df[df['Scenario'].isin(tech_choice_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
+        color_map=sector_color_map,
         year=2045,
     )
 
@@ -673,13 +674,13 @@ def load_tech_choice_graph_params():
         sc['relative_to'] = dfg['relative_to'].unique()[0]
         sc['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
         sc['sector_map'] = dict(zip(dfg['Scenario'], dfg['Sector']))
-        sc['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
+        # sc['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
         scenario_comp_params.append(sc)
 
     return list(relevant_scenarios), scenario_comp_params
 
 
-def graph_tech_choice_emissions(df_in, tech_choice_graph_params, year=2045):
+def graph_tech_choice_emissions(df_in, tech_choice_graph_params, color_map, year=2045):
     id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
     result_cols = list(set(df_in.columns) - set(id_cols))
     subgroup_dict = {
@@ -697,9 +698,6 @@ def graph_tech_choice_emissions(df_in, tech_choice_graph_params, year=2045):
         df_graph['Sector'] = df_graph['Scenario'].map(tc['sector_map'])
         df_graph = df_graph.replace({'Scenario': tc['name_map']})
 
-        # todo: fix color map
-        color_map = dict(zip([tc['name_map'][sce] for sce in tc['scenarios']],
-                             [tc['color_map'][sce] for sce in tc['scenarios']]))
         fig = plot_bar_scenario_comparison(
             df=df_graph,
             title='Abated Emissions Contribution',
