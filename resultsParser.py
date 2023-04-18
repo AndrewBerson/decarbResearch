@@ -21,8 +21,8 @@ CAPACITY_ADDED_STRING = "Capacity Added"
 
 
 def main():
-
-    df = load_data(reload=False)
+    reload_results = False
+    df = load_data(reload=reload_results)
     scenarios_to_compare, scenario_comparison_params = load_sce_comps()
     egen_resource_color_map, sector_color_map = load_color_maps()
     egen_branch_map_long, egen_branch_map_short = form_egen_branch_maps(df)
@@ -124,115 +124,30 @@ def main():
     )
 
     # Load shape graphs
-    df_loads = load_load_shapes(reload=True)
-    load_scenarios_to_compare, load_scenario_comparison_params = load_load_comps()
+    df_loads = load_load_shapes(reload=reload_results)
+    load_scenarios_to_compare, load_scenario_comparison_params, individual_load_params = load_load_comps()
     df_load_comparison = df_loads[df_loads['Scenario'].isin(load_scenarios_to_compare)]
     graph_load_comparison(
         df_in=df_load_comparison,
         comp_params=load_scenario_comparison_params,
     )
+    df_invidividual_loads = df_loads[df_loads['Scenario'].isin(list(individual_load_params.keys()))]
+    graph_load_by_sector(
+        df_in=df_invidividual_loads,
+        params=individual_load_params,
+        color_map=sector_color_map,
+    )
 
     # RPS graphs
 
     # Sensitivity graphs
-    # tech_choice_scenarios, tech_choice_graph_params = load_tech_choice_graph_params()
-    # graph_tech_choice_emissions(
-    #     df_in=df[df['Scenario'].isin(tech_choice_scenarios)],
-    #     tech_choice_graph_params=tech_choice_graph_params,
-    #     color_map=sector_color_map,
-    #     year=2045,
-    # )
-
-
-def graph_load_comparison(df_in, comp_params):
-    df = sum_load_across_branches(df_in)
-    df['Value'] = df['Value'] / 1e3
-
-    for i, comp in enumerate(comp_params):
-        df_graph = pd.DataFrame(columns=df.columns)
-        for sce in comp['scenarios']:
-            df_graph = pd.concat([
-                df_graph,
-                df[
-                    (df['Scenario'] == sce) &
-                    (df['Year'] == comp['year_map'][sce]) &
-                    (df['Result Variable'] == comp['result_map'][sce])
-                ]
-            ], axis=0, ignore_index=True)
-        df_graph = df_graph.replace({'Scenario': comp['name_map']})
-        fig = plot_load_comparison(
-            df=df_graph,
-            color_col='Scenario',
-            dash_col='Scenario',
-            color_dict=comp['color_map_name'],
-            line_dict=comp['line_map_name'],
-            title='Load Shape',
-            xaxis_title='Representative Day of Month',
-            yaxis_title='GW',
-        )
-        fig.write_image(FIGURES_PATH / f"load_shape_comparison_{i}.pdf")
-
-
-def plot_load_comparison(df, color_col, dash_col, color_dict, line_dict, title, xaxis_title, yaxis_title):
-    fig = px.line(
-        df,
-        x='Hour',
-        y='Value',
-        color=color_col,
-        color_discrete_map=color_dict,
-        line_dash=dash_col,
-        line_dash_map=line_dict,
+    tech_choice_scenarios, tech_choice_graph_params = load_tech_choice_graph_params()
+    graph_tech_choice_emissions(
+        df_in=df[df['Scenario'].isin(tech_choice_scenarios)],
+        tech_choice_graph_params=tech_choice_graph_params,
+        color_map=sector_color_map,
+        year=2045,
     )
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = update_legend_layout(fig, xaxis_title)
-    fig = update_plot_size(fig)
-    fig = update_to_load_shape_layout(fig)
-    return fig
-
-
-def update_to_load_shape_layout(fig):
-    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    fig.update_layout(
-        xaxis=dict(
-            tickmode='array',
-            tickvals=np.arange(12, 289, 24),
-            ticktext=months,
-            showgrid=False,
-            minor=dict(
-                tickvals=np.arange(0, 289, 24),
-                showgrid=True,
-                gridcolor='#FFFFFF'
-            )
-        )
-    )
-    month_ends = np.arange(0, 289, 24)
-    for i, (x0, x1) in enumerate(zip(month_ends, month_ends[1:])):
-        if i % 2 == 0:
-            continue
-        else:
-            fig.add_vrect(x0=x0, x1=x1, line_width=0, fillcolor='grey', opacity=0.1)
-    return fig
-
-
-def sum_load_across_branches(df_in):
-    df = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Result Variable', 'Value'])
-
-    yrs = df_in['Year'].unique()
-    hrs = df_in['Hour'].unique()
-    scenarios = df_in['Scenario'].unique()
-    results_vars = df_in['Result Variable'].unique()
-
-    for yr, hr, sce, res, in itertools.product(yrs, hrs, scenarios, results_vars):
-        df_to_add = df_in[
-            (df_in['Year'] == yr) &
-            (df_in['Hour'] == hr) &
-            (df_in['Scenario'] == sce) &
-            (df_in['Result Variable'] == res)
-        ]
-        if len(df_to_add.index) > 0:
-            df.loc[len(df.index), :] = yr, hr, sce, res, df_to_add['Value'].sum(axis=0)
-
-    return df
 
 
 def load_data(reload):
@@ -410,7 +325,10 @@ def load_load_comps():
 
         scenario_comp_params.append(sc)
 
-    return list(relevant_scenarios), scenario_comp_params
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="individual_load_shapes")
+    individual_load_params = dict(zip(df['Scenario'], df['Naming']))
+
+    return list(relevant_scenarios), scenario_comp_params, individual_load_params
 
 
 def load_individual_scenarios():
@@ -876,6 +794,121 @@ def graph_tech_choice_emissions(df_in, tech_choice_graph_params, color_map, year
         fig.write_image(FIGURES_PATH / f"tech_choice_emissions_{i}.pdf")
 
 
+def graph_load_by_sector(df_in, params, color_map):
+    df = df_in[df_in['Result Variable'] == 'Load Shape'].copy()
+    df['Value'] = df['Value'] / 1e3
+
+    for i, (key, dfg) in enumerate(df.groupby(['Year', 'Scenario'])):
+        yr, sce = key
+        fig = plot_area_subgroup_over_time(
+            df=dfg[
+                (dfg['Scenario'] == sce) &
+                (dfg['Year'] == yr)
+            ],
+            title=f"Electric Load by Sector<br>{params[sce]}",
+            xaxis_title="Representative Day",
+            yaxis_title="GW",
+            color_map=color_map,
+            yaxis_col='Value',
+            xaxis_col='Hour',
+            color_col='Branch',
+            include_sum=True,
+        )
+        fig = update_to_load_shape_layout(fig)
+        fig.write_image(FIGURES_PATH / f"load_shape_by_sector_{i}.pdf")
+
+
+def graph_load_comparison(df_in, comp_params):
+    df = sum_load_across_branches(df_in)
+    df['Value'] = df['Value'] / 1e3
+
+    for i, comp in enumerate(comp_params):
+        df_graph = pd.DataFrame(columns=df.columns)
+        for sce in comp['scenarios']:
+            df_graph = pd.concat([
+                df_graph,
+                df[
+                    (df['Scenario'] == sce) &
+                    (df['Year'] == comp['year_map'][sce]) &
+                    (df['Result Variable'] == comp['result_map'][sce])
+                ]
+            ], axis=0, ignore_index=True)
+        df_graph = df_graph.replace({'Scenario': comp['name_map']})
+        fig = plot_load_comparison(
+            df=df_graph,
+            color_col='Scenario',
+            dash_col='Scenario',
+            color_dict=comp['color_map_name'],
+            line_dict=comp['line_map_name'],
+            title='Load Shape',
+            xaxis_title='Representative Day of Month',
+            yaxis_title='GW',
+        )
+        fig.write_image(FIGURES_PATH / f"load_shape_comparison_{i}.pdf")
+
+
+def plot_load_comparison(df, color_col, dash_col, color_dict, line_dict, title, xaxis_title, yaxis_title):
+    fig = px.line(
+        df,
+        x='Hour',
+        y='Value',
+        color=color_col,
+        color_discrete_map=color_dict,
+        line_dash=dash_col,
+        line_dash_map=line_dict,
+    )
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_legend_layout(fig, xaxis_title)
+    fig = update_plot_size(fig)
+    fig = update_to_load_shape_layout(fig)
+    return fig
+
+
+def update_to_load_shape_layout(fig):
+    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    fig.update_layout(
+        xaxis=dict(
+            tickmode='array',
+            tickvals=np.arange(12, 289, 24),
+            ticktext=months,
+            showgrid=False,
+            minor=dict(
+                tickvals=np.arange(0, 289, 24),
+                showgrid=True,
+                gridcolor='#FFFFFF'
+            )
+        )
+    )
+    month_ends = np.arange(0, 289, 24)
+    for i, (x0, x1) in enumerate(zip(month_ends, month_ends[1:])):
+        if i % 2 == 0:
+            continue
+        else:
+            fig.add_vrect(x0=x0, x1=x1, line_width=0, fillcolor='grey', opacity=0.1)
+    return fig
+
+
+def sum_load_across_branches(df_in):
+    df = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Result Variable', 'Value'])
+
+    yrs = df_in['Year'].unique()
+    hrs = df_in['Hour'].unique()
+    scenarios = df_in['Scenario'].unique()
+    results_vars = df_in['Result Variable'].unique()
+
+    for yr, hr, sce, res, in itertools.product(yrs, hrs, scenarios, results_vars):
+        df_to_add = df_in[
+            (df_in['Year'] == yr) &
+            (df_in['Hour'] == hr) &
+            (df_in['Scenario'] == sce) &
+            (df_in['Result Variable'] == res)
+        ]
+        if len(df_to_add.index) > 0:
+            df.loc[len(df.index), :] = yr, hr, sce, res, df_to_add['Value'].sum(axis=0)
+
+    return df
+
+
 def form_egen_branch_maps(df):
     egen_res_map = {
         'Biogas': [],
@@ -1012,26 +1045,65 @@ def form_sector_branch_map(df):
     return sector_map
 
 
-def plot_bar_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map, include_sum=True):
+def plot_bar_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map, yaxis_col='Value',
+                                xaxis_col='Year', color_col='Subgroup', include_sum=True):
     fig = px.bar(
         df,
-        x='Year',
-        y='Value',
-        color='Subgroup',
+        x=xaxis_col,
+        y=yaxis_col,
+        color=color_col,
         color_discrete_map=color_map,
     )
 
+    # xaxis is a unit of time
+    # yaxis is a value (eg emissions)
     if include_sum:
-        df_sum = pd.DataFrame(columns=['Year', 'Value'])
-        for yr in df['Year'].unique():
-            annual_sum = df[df['Year'] == yr]['Value'].sum()
-            df_sum.loc[len(df_sum.index)] = [yr, annual_sum]
-        # add line to graph showing cumulative sum
+        df_sum = pd.DataFrame(columns=[xaxis_col, yaxis_col])
+        for t in df[xaxis_col].unique():
+            sum_in_t = df[df[xaxis_col] == t][yaxis_col].sum()
+            df_sum.loc[len(df_sum.index)] = [t, sum_in_t]
+        # add line to graph showing sum
         fig.add_trace(go.Scatter(
             mode='lines',
-            x=df_sum['Year'],
-            y=df_sum['Value'],
-            name="Annual Total",
+            x=df_sum[xaxis_col],
+            y=df_sum[yaxis_col],
+            name="Total",
+            showlegend=True,
+            line=dict(
+                color='black',
+                dash='solid',
+            )
+        ))
+
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_legend_layout(fig, xaxis_title)
+    fig = update_plot_size(fig)
+    return fig
+
+
+def plot_area_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map, yaxis_col='Value',
+                                xaxis_col='Year', color_col='Subgroup', include_sum=True):
+    fig = px.area(
+        df,
+        x=xaxis_col,
+        y=yaxis_col,
+        color=color_col,
+        color_discrete_map=color_map,
+    )
+
+    # xaxis is a unit of time
+    # yaxis is a value (eg emissions)
+    if include_sum:
+        df_sum = pd.DataFrame(columns=[xaxis_col, yaxis_col])
+        for t in df[xaxis_col].unique():
+            sum_in_t = df[df[xaxis_col] == t][yaxis_col].sum()
+            df_sum.loc[len(df_sum.index)] = [t, sum_in_t]
+        # add line to graph showing sum
+        fig.add_trace(go.Scatter(
+            mode='lines',
+            x=df_sum[xaxis_col],
+            y=df_sum[yaxis_col],
+            name="Total",
             showlegend=True,
             line=dict(
                 color='black',
