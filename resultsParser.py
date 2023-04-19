@@ -30,14 +30,14 @@ def main():
     sector_branch_map = form_sector_branch_map(df)
 
     # comparisons between scenarios
-    # base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-    #                                 egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+                                    egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
     # results limited to one scenario
-    # individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-    #                            egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+                               egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
-    # load shapes
+    # load shape graphs
     # df_loads = load_load_shapes(reload=reload_results)
     # load_shape_graphs(df_loads, sector_color_map)
 
@@ -237,6 +237,7 @@ def reformat(df_excel):
 
     # iterate through all combinations of scenario, result and fuel
     for s, r, f in itertools.product(scenarios, result_vars, fuels):
+        print(f"{s}, {r}, {f}")
         # find columns in df_excel that contain relevant scenario, result, and fuel
         col_mask = np.array(
             (df_excel.loc['Scenario', :] == s) &
@@ -291,6 +292,7 @@ def load_load_shapes(reload):
         df = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
 
         for row in df_excel.index:
+            # todo: fix error
             df_to_add = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
             df_to_add['Hour'] = pd.Series(hour_cols)
             df_to_add['Value'] = pd.Series(df_excel.loc[row, hour_cols]).reset_index(drop=True)
@@ -344,11 +346,11 @@ def load_load_comps():
     """ Function to load scenario comparisons as dictated in controller """
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="load_shape_comparisons")
 
-    relevant_scenarios = set()
+    relevant_scenarios = set(df['Scenario'].unique())
     scenario_comp_params = []
 
     for _, dfg in df.groupby('Group'):
-        relevant_scenarios.update(set(dfg['Scenario'].unique()))
+        # relevant_scenarios.update(set(dfg['Scenario'].unique()))
         sc = dict()
         sc['scenarios'] = dfg['Scenario'].tolist()
         sc['result_map'] = dict(zip(dfg['Scenario'], dfg['Result Variable']))
@@ -362,6 +364,7 @@ def load_load_comps():
         scenario_comp_params.append(sc)
 
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="individual_load_shapes")
+    relevant_scenarios.update(df['Scenario'].unique())
     individual_load_params = dict(zip(df['Scenario'], df['Naming']))
 
     return list(relevant_scenarios), scenario_comp_params, individual_load_params
