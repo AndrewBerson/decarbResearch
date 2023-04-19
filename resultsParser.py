@@ -9,8 +9,8 @@ import os
 import seaborn as sns
 
 DISCOUNT_RATE = 0.05
-RELATIVE_TO = 'CARB Ref + Clean Fuels_0'
-# RELATIVE_TO = 'LEAP Version CARB Reference_0_nan'
+# RELATIVE_TO = 'CARB Ref + Clean Fuels_0'
+RELATIVE_TO = 'LEAP Version CARB Reference_0_nan'
 INPUT_PATH = Path("resultsFiles/apr13_2023")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
@@ -23,23 +23,23 @@ CAPACITY_ADDED_STRING = "Capacity Added"
 
 def main():
     reload_results = False    # set to True if using a new raw results excel document
-    
+
     df = load_data(reload=reload_results)
     egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map = load_color_maps()
     egen_branch_map_long, egen_branch_map_short = form_egen_branch_maps(df)
     sector_branch_map = form_sector_branch_map(df)
 
     # comparisons between scenarios
-    base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                                    egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    # base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+    #                                 egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
     # results limited to one scenario
-    individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                               egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    # individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+    #                            egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
     # load shapes
-    df_loads = load_load_shapes(reload=reload_results)
-    load_shape_graphs(df_loads, sector_color_map)
+    # df_loads = load_load_shapes(reload=reload_results)
+    # load_shape_graphs(df_loads, sector_color_map)
 
     # Sensitivity graphs
     sensitivity_graphs(df, sector_color_map)
@@ -49,6 +49,7 @@ def main():
 
 def sensitivity_graphs(df, sector_color_map):
     tech_choice_scenarios, tech_choice_graph_params = load_tech_choice_graph_params()
+    tech_choice_scenarios = tech_choice_scenarios + [RELATIVE_TO]
     graph_tech_choice_emissions(
         df_in=df[df['Scenario'].isin(tech_choice_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
@@ -56,6 +57,11 @@ def sensitivity_graphs(df, sector_color_map):
         year=2045,
     )
     graph_tech_choice_marginal_cost(
+        df_in=df[df['Scenario'].isin(tech_choice_scenarios)],
+        tech_choice_graph_params=tech_choice_graph_params,
+        color_map=sector_color_map,
+    )
+    graph_tech_choice_cost_of_abatement(
         df_in=df[df['Scenario'].isin(tech_choice_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
         color_map=sector_color_map,
@@ -855,6 +861,39 @@ def graph_tech_choice_marginal_cost(df_in, tech_choice_graph_params, color_map, 
         )
         fig = update_to_tall_fig(fig)
         fig.write_image(FIGURES_PATH / f"tech_choice_costs_{i}.pdf")
+
+
+def graph_tech_choice_cost_of_abatement(df_in, tech_choice_graph_params, color_map):
+    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
+    result_cols = list(set(df_in.columns) - set(id_cols))
+    subgroup_dict = {
+        'all_branches': result_cols,
+    }
+
+    for i, params in enumerate(tech_choice_graph_params):
+        # relative_to = params['relative_to']
+        relative_to = RELATIVE_TO
+        df_graph = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to)
+        df_graph = df_graph[
+            (df_graph['Scenario'].isin(params['scenarios'])) &
+            (df_graph['Year'] == df_graph['Year'].max())
+             ].copy()
+        df_graph['Value'] = -1 * df_graph['cumulative_marginal_cost'] / df_graph['cumulative_marginal_emissions']
+        df_graph['Sector'] = df_graph['Scenario'].map(params['sector_map'])
+        df_graph = df_graph.replace({'Scenario': params['name_map']})
+        df_graph = df_graph.sort_values(by=['Sector', 'Scenario'])
+        fig = plot_bar_scenario_comparison(
+            df=df_graph,
+            title='Cost of Abatement',
+            xaxis_title='$ / tonne CO2e',
+            yaxis_title='',
+            color_dict=color_map,
+            color_column='Sector',
+            include_legend=True,
+        )
+        fig = update_to_tall_fig(fig)
+        # fig.update_layout(xaxis_range=[-500, 1000])
+        fig.write_image(FIGURES_PATH / f"tech_choice_cost_of_abatement_{i}.pdf")
 
 
 def graph_load_by_sector(df_in, params, color_map):
