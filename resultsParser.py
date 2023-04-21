@@ -27,6 +27,11 @@ def main():
     # load data and make copies of scenarios specified in the controller
     df = load_data(reload=reload_results)
     df = create_scenario_copies(df)
+
+    d = {'LEAP Version CARB Proposed_0_nan': 'off'}
+    df = remove_instate_incentives(df, d)
+
+
     df_loads = load_load_shapes(reload=reload_results)
     df_loads = create_scenario_copies(df_loads)
 
@@ -208,7 +213,6 @@ def sensitivity_graphs(df, sector_color_map, sector_branch_map):
         tech_choice_graph_params=tech_choice_graph_params,
         color_map=sector_color_map,
     )
-    # TODO: similar graphs but each bar is a stacked-bar and costs and emissions are broken up by sector
 
 
 def load_data(reload):
@@ -291,9 +295,6 @@ def reformat(df_excel):
         df_new.drop(labels='Branch', axis=0, inplace=True)
 
         # add back in scenario, result variable, and fuel as columns
-        # df_new['Scenario'] = scenario
-        # df_new['Result Variable'] = result_var
-        # df_new['Fuel'] = fuel
         df_new[['Scenario', 'Result Variable', 'Fuel']] = [scenario, result_var, fuel]
 
         # make Year its own column
@@ -322,6 +323,20 @@ def create_scenario_copies(df):
         df_to_add = df[df['Scenario'] == original_name].copy()
         df_to_add['Scenario'] = new_name
         df = pd.concat([df, df_to_add], axis=0)
+
+    return df
+
+
+def remove_instate_incentives(df, scenario_dict):
+
+    scenarios_to_remove_incentives = [sce for sce, on_off in scenario_dict.items() if on_off.lower() == 'off']
+    relevant_columns = [col for col in df.columns if 'Non Energy\\Incentives' in col]
+
+    df.loc[
+        (df['Scenario'].isin(scenarios_to_remove_incentives)) &
+        (df['Result Variable'] == COST_RESULT_STRING),
+        relevant_columns
+    ] = 0
 
     return df
 
