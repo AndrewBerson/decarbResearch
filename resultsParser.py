@@ -22,7 +22,7 @@ CAPACITY_ADDED_STRING = "Capacity Added"
 
 
 def main():
-    reload_results = True    # set to True if using a new raw results excel document
+    reload_results = False    # set to True if using a new raw results excel document
 
     # load data and make copies of scenarios specified in the controller
     df = load_data(reload=reload_results)
@@ -36,18 +36,18 @@ def main():
     sector_branch_map = form_sector_branch_map(df)
 
     # make graphs of comparisons between scenarios
-    base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                                    egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    # base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+    #                                 egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
     # make graphs exploring individual scenarios
-    individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                               egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    # individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+    #                            egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
     # load shape graphs
-    load_shape_graphs(df_loads, sector_color_map)
+    # load_shape_graphs(df_loads, sector_color_map)
 
     # Sensitivity graphs
-    sensitivity_graphs(df, sector_color_map)
+    sensitivity_graphs(df, sector_color_map, sector_branch_map)
 
     # TODO: RPS graphs
 
@@ -169,18 +169,39 @@ def load_shape_graphs(df_loads, sector_color_map):
     )
 
 
-def sensitivity_graphs(df, sector_color_map):
+def sensitivity_graphs(df, sector_color_map, sector_branch_map):
     tech_choice_relevant_scenarios, tech_choice_graph_params = load_tech_choice_graph_params()
     graph_tech_choice_emissions(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
+        stacked=False,
+        branch_map=sector_branch_map,
+        color_map=sector_color_map,
+        year=2045,
+    )
+    graph_tech_choice_emissions(
+        df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
+        tech_choice_graph_params=tech_choice_graph_params,
+        stacked=True,
+        branch_map=sector_branch_map,
         color_map=sector_color_map,
         year=2045,
     )
     graph_tech_choice_marginal_cost(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
+        stacked=False,
+        branch_map=sector_branch_map,
         color_map=sector_color_map,
+        year=2045,
+    )
+    graph_tech_choice_marginal_cost(
+        df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
+        tech_choice_graph_params=tech_choice_graph_params,
+        stacked=True,
+        branch_map=sector_branch_map,
+        color_map=sector_color_map,
+        year=2045,
     )
     graph_tech_choice_cost_of_abatement(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
@@ -914,14 +935,19 @@ def load_tech_choice_graph_params():
     return list(relevant_scenarios), scenario_comp_params
 
 
-def graph_tech_choice_emissions(df_in, tech_choice_graph_params, color_map, year=2045):
+def graph_tech_choice_emissions(df_in, tech_choice_graph_params, stacked, branch_map, color_map, year=2045):
     id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
     result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
 
-    df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
+    if not stacked:
+        branch_map = {
+            'all_branches': result_cols,
+        }
+        color_col = 'Sector'
+    else:
+        color_col = 'Subgroup'
+
+    df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, branch_map)
     df = df[df['Year'] == year]
     df = df.reset_index()    # need to reset index for the marginalize_it function to work
     df['Value'] = -1 * df['Value'] / 1e6
@@ -939,22 +965,32 @@ def graph_tech_choice_emissions(df_in, tech_choice_graph_params, color_map, year
             xaxis_title='Mt CO2e',
             yaxis_title='',
             color_dict=color_map,
-            color_column='Sector',
+            color_column=color_col,
             include_legend=True,
         )
         if len(params['scenarios']) > 30:
             fig = update_to_tall_fig(fig)
-        fig.write_image(FIGURES_PATH / f"tech_choice_emissions_{i}.pdf")
+
+        if stacked:
+            fig.write_image(FIGURES_PATH / f"tech_choice_emissions_stacked_by_sector_{i}.pdf")
+        else:
+            fig.write_image(FIGURES_PATH / f"tech_choice_emissions{i}.pdf")
 
 
-def graph_tech_choice_marginal_cost(df_in, tech_choice_graph_params, color_map, year=2045):
+
+def graph_tech_choice_marginal_cost(df_in, tech_choice_graph_params, stacked, branch_map, color_map, year=2045):
     id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
     result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
 
-    df = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, subgroup_dict)
+    if not stacked:
+        branch_map = {
+            'all_branches': result_cols,
+        }
+        color_col = 'Sector'
+    else:
+        color_col = 'Subgroup'
+
+    df = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, branch_map)
     df = discount_it(df)
     df = cumsum_it(df)
     df = df[df['Year'] == year]
@@ -974,12 +1010,16 @@ def graph_tech_choice_marginal_cost(df_in, tech_choice_graph_params, color_map, 
             xaxis_title='$B',
             yaxis_title='',
             color_dict=color_map,
-            color_column='Sector',
+            color_column=color_col,
             include_legend=True,
         )
         if len(params['scenarios']) > 30:
             fig = update_to_tall_fig(fig)
-        fig.write_image(FIGURES_PATH / f"tech_choice_costs_{i}.pdf")
+
+        if stacked:
+            fig.write_image(FIGURES_PATH / f"tech_choice_costs_stacked_by_sector_{i}.pdf")
+        else:
+            fig.write_image(FIGURES_PATH / f"tech_choice_costs_{i}.pdf")
 
 
 def graph_tech_choice_cost_of_abatement(df_in, tech_choice_graph_params, color_map):
