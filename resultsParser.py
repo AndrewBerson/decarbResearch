@@ -9,9 +9,7 @@ from tqdm import tqdm
 import seaborn as sns
 
 DISCOUNT_RATE = 0.05
-# RELATIVE_TO = 'CARB Ref + Clean Fuels_0'
-# RELATIVE_TO = 'LEAP Version CARB Reference_0_nan'
-INPUT_PATH = Path("resultsFiles/apr13_2023")
+INPUT_PATH = Path("resultsFiles/apr22_2023")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 FIGURES_PATH = INPUT_PATH / "figures"
@@ -27,11 +25,6 @@ def main():
     # load data and make copies of scenarios specified in the controller
     df = load_data(reload=reload_results)
     df = create_scenario_copies(df)
-
-    d = {'LEAP Version CARB Proposed_0_nan': 'off'}
-    df = remove_instate_incentives(df, d)
-
-
     df_loads = load_load_shapes(reload=reload_results)
     df_loads = create_scenario_copies(df_loads)
 
@@ -41,18 +34,18 @@ def main():
     sector_branch_map = form_sector_branch_map(df)
 
     # make graphs of comparisons between scenarios
-    # base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-    #                                 egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+                                    egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
     # make graphs exploring individual scenarios
-    # individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-    #                            egen_branch_map_long, egen_branch_map_short, sector_branch_map)
+    individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
+                               egen_branch_map_long, egen_branch_map_short, sector_branch_map)
 
     # load shape graphs
-    # load_shape_graphs(df_loads, sector_color_map)
+    load_shape_graphs(df_loads, sector_color_map)
 
     # Sensitivity graphs
-    sensitivity_graphs(df, sector_color_map, sector_branch_map)
+    # sensitivity_graphs(df, sector_color_map, sector_branch_map)
 
     # TODO: RPS graphs
 
@@ -160,15 +153,16 @@ def individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_c
 
 def load_shape_graphs(df_loads, sector_color_map):
     # TODO: change individual load params so that it has the same format of all the others (ie: one dict per graph)
-    load_scenarios_to_compare, load_scenario_comparison_params, individual_load_params = load_load_comps()
+    load_scenarios_to_compare, load_scenario_comparison_params = load_load_comps()
     df_load_comparison = df_loads[df_loads['Scenario'].isin(load_scenarios_to_compare)]
     graph_load_comparison(
         df_in=df_load_comparison,
         comp_params=load_scenario_comparison_params,
     )
-    df_invidividual_loads = df_loads[df_loads['Scenario'].isin(list(individual_load_params.keys()))]
+    individual_load_scenarios, individual_load_params = load_individual_load_params()
+    df_individual_loads = df_loads[df_loads['Scenario'].isin(individual_load_scenarios)]
     graph_load_by_sector(
-        df_in=df_invidividual_loads,
+        df_in=df_individual_loads,
         params=individual_load_params,
         color_map=sector_color_map,
     )
@@ -249,7 +243,7 @@ def load_all_files(input_path, sheet="Results"):
             added_scenarios = set(df["Scenario"].unique())
             i += 1
 
-    return df
+    return df.reset_index(drop=True)
 
 
 def reformat(df_excel):
@@ -389,6 +383,7 @@ def load_sce_comps():
         params['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
         params['legend_map'] = dict(zip(dfg['Scenario'], dfg['Include in legend']))
         params['marker_map'] = dict(zip(dfg['Scenario'], dfg['Marker']))
+        params['instate_incentives_map'] = dict(zip(dfg['Scenario'], dfg['In State Incentives']))
 
         # dictionaries mapping name --> color, line, etc.
         params['line_map_by_name'] = dict(zip(dfg['Naming'], dfg['Line']))
@@ -441,12 +436,27 @@ def load_load_comps():
 
         scenario_comp_params.append(params)
 
+    return list(relevant_scenarios), scenario_comp_params,
+
+
+def load_individual_load_params():
+
     # load data for graphs about single scenarios
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="individual_load_shapes")
-    relevant_scenarios.update(df['Scenario'].unique())
-    individual_load_params = dict(zip(df['Scenario'], df['Naming']))
+    relevant_scenarios = set(df['Scenario'].unique())
 
-    return list(relevant_scenarios), scenario_comp_params, individual_load_params
+    individual_load_params = []
+    for _, dfg in df.groupby('id'):
+        params = {
+            'scenario': dfg['Scenario'].unique()[0],
+            'name': dfg['Naming'].unique()[0],
+            'year': dfg['Year'].unique()[0],
+            'result_var': dfg['Result Variable'].unique()[0],
+            'name_map': dict(zip(dfg['Scenario'], dfg['Naming'])),
+        }
+        individual_load_params.append(params)
+
+    return list(relevant_scenarios), individual_load_params
 
 
 def load_individual_scenarios():
@@ -463,6 +473,7 @@ def load_individual_scenarios():
             'id': dfg['id'].unique()[0],
             'name': dfg['Naming'].unique()[0],
             'relative_to': dfg['Relative to'].unique()[0],
+            'instate_incentives': dfg['In State Incentives'].unique()[0],
 
             # which graphs to generate
             'marginal_costs_by_sector': dfg['marginal costs by sector'].unique()[0],
@@ -1071,17 +1082,18 @@ def graph_tech_choice_cost_of_abatement(df_in, tech_choice_graph_params, color_m
 
 
 def graph_load_by_sector(df_in, params, color_map):
-    df = df_in[df_in['Result Variable'] == 'Load Shape'].copy()
+    df = df_in.copy()
     df['Value'] = df['Value'] / 1e3
 
-    for i, (key, dfg) in enumerate(df.groupby(['Year', 'Scenario'])):
-        yr, sce = key
+    for i, param in enumerate(params):
+        name = param['name']
         fig = plot_area_subgroup_over_time(
-            df=dfg[
-                (dfg['Scenario'] == sce) &
-                (dfg['Year'] == yr)
+            df=df[
+                (df['Scenario'] == param['scenario']) &
+                (df['Year'] == param['year']) &
+                (df['Result Variable'] == param['result_var'])
             ],
-            title=f"Electric Load by Sector<br>{params[sce]}",
+            title=f"Electric Load by Sector<br>{name}",
             xaxis_title="Representative Day",
             yaxis_title="GW",
             color_map=color_map,
