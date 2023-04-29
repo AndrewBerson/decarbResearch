@@ -127,6 +127,7 @@ def base_scenario_comparison_graphs(df, color_maps, branch_maps):
         scenario_comparison_params=scenario_comparison_params,
         color_map=color_maps['fuels'],
         branch_map=branch_maps['all_branches_together'],
+        fuels=["Renewable Diesel", "RNG"],
         year=2045,
     )
     # TODO: Energy demand over time scenario comparisons,
@@ -919,31 +920,38 @@ def graph_annual_marginal_abated_emissions_by_sector_scenario_comparison(df_in, 
             fig.write_image(FIGURES_PATH / f"annual_marginal_emissions_by_sector_{i}.pdf")
 
 
-def graph_energy_demand_by_fuel_scenario_comparison_bar(df_in, scenario_comparison_params, color_map, branch_map,
+def graph_energy_demand_by_fuel_scenario_comparison_bar(df_in, scenario_comparison_params, color_map, branch_map, fuels,
                                                         year=2045):
 
     df = calculate_annual_result_by_subgroup(df_in, [ENERGY_DEMAND_STRING, INPUTS_STRING], branch_map)
     df = df[df['Year'] == year]
     df = df.replace({"Fuel": FUELS_TO_COMBINE})
-    df = df[df['Fuel'] != "Other"].copy()
-    # TODO: groupby fuel to combine energy demand final units with inputs
-    # df = df.groupby()
+
+    if fuels == None:
+        df = df[df['Fuel'] != "Other"].copy()
+    else:
+        df = df[df['Fuel'].isin(fuels)]
+
+    df = df.drop(columns=['Year'])
+    df = df.groupby(by=['Scenario', 'Fuel'], as_index=False).sum()
 
     for i, params in enumerate(scenario_comparison_params):
         if params['energy_demand_by_fuel']:
             df_graph = df[df['Scenario'].isin(params['scenarios'])].copy()
             df_graph = df_graph.replace({'Scenario': params['name_map']})
 
-            fig = plot_bar_scenario_comparison(
+            fig = plot_grouped_bar_scenario_comparison(
                 df=df_graph,
-                title=f'Energy Demand by Fuel in {year}',
-                xaxis_title='GJ',
-                yaxis_title='',
-                color_dict=color_map,
+                title=f'Energy Demand in {year}',
+                xaxis_title='Scenario',
+                yaxis_title='GJ',
+                grouping_column='Scenario',
                 color_column='Fuel',
+                color_dict=color_map,
                 include_legend=True,
             )
             fig.write_image(FIGURES_PATH / f"energy_demand_by_fuel_{i}.pdf")
+
 
 
 def graph_marginal_costs_by_sector_over_time(df_in, individual_sce_graph_params,
@@ -1297,142 +1305,6 @@ def sum_load_across_branches(df_in):
     return df
 
 
-def form_egen_branch_maps(df):
-    egen_res_map = {
-        'Biogas': [],
-        'Biomass': [],
-        'Coal': [],
-        'Geothermal': [],
-        'H2 Fuel Cell': [],
-        'Hydro': [],
-        'Li Ion': [],
-        'Natural Gas': [],
-        'Natural Gas CCS': [],
-        'Nuclear': [],
-        'Solar': [],
-        'Unspecified': [],
-        'Wind': [],
-    }
-
-    egen_branches = [col for col in df.columns if "Transformation\Electricity Production" in col]
-
-    for branch in egen_branches:
-        if ('landfill' in branch.lower()) or ('manure' in branch.lower()) or ('wwtp' in branch.lower()) or (
-                'food' in branch.lower()):
-            egen_res_map['Biogas'].append(branch)
-        elif ('biomass' in branch.lower()) or ('solid waste' in branch.lower()):
-            egen_res_map['Biomass'].append(branch)
-        elif 'coal' in branch.lower():
-            egen_res_map['Coal'].append(branch)
-        elif 'geothermal' in branch.lower():
-            egen_res_map['Geothermal'].append(branch)
-        elif 'hydrogen fuel cell' in branch.lower():
-            egen_res_map['H2 Fuel Cell'].append(branch)
-        elif 'hydro' in branch.lower():
-            egen_res_map['Hydro'].append(branch)
-        elif 'li ion' in branch.lower():
-            egen_res_map['Li Ion'].append(branch)
-        elif 'gas css' in branch.lower():
-            egen_res_map['Natural Gas CCS'].append(branch)
-        elif ('natural gas' in branch.lower()) or ('ng' in branch.lower()):
-            egen_res_map['Natural Gas'].append(branch)
-        elif 'nuclear' in branch.lower():
-            egen_res_map['Nuclear'].append(branch)
-        elif 'solar' in branch.lower():
-            egen_res_map['Solar'].append(branch)
-        elif 'unspecified' in branch.lower():
-            egen_res_map['Unspecified'].append(branch)
-        elif 'wind' in branch.lower():
-            egen_res_map['Wind'].append(branch)
-        else:
-            print(f"Branch: {branch} not assigned")
-
-    egen_res_map_short = {
-        'Other': egen_res_map['Coal'] + egen_res_map['Geothermal'] + egen_res_map['Nuclear'] + egen_res_map[
-            'Unspecified'] + egen_res_map['Biogas'] + egen_res_map['Biomass'],
-        'H2 Fuel Cell': egen_res_map['H2 Fuel Cell'],
-        'Li Ion': egen_res_map['Li Ion'],
-        'Hydro': egen_res_map['Hydro'],
-        'Natural Gas': egen_res_map['Natural Gas'],
-        'Natural Gas CCS': egen_res_map['Natural Gas CCS'],
-        'Solar': egen_res_map['Solar'],
-        'Wind': egen_res_map['Wind'],
-    }
-
-    return egen_res_map, egen_res_map_short
-
-
-def form_sector_branch_map(df):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-
-    sector_map = {
-        'Industry': [],
-        'Electricity': [],
-        'Buildings': [],
-        'Agriculture': [],
-        'Transportation': [],
-        'Resources': [],
-        'Incentives': [],
-    }
-
-    for branch in list(set(df.columns) - set(id_cols)):
-        if (
-                ('Demand\Residential' in branch) or
-                ('Demand\Commercial' in branch) or
-                ('Non Energy\Residential' in branch) or
-                ('Non Energy\Commercial' in branch)
-        ):
-            sector_map['Buildings'].append(branch)
-        elif (
-                ('Demand\Transportation' in branch) or
-                ('Non Energy\Transportation' in branch)
-        ):
-            sector_map['Transportation'].append(branch)
-        elif (
-                ('Demand\Agriculture' in branch) or
-                ('Non Energy\Agriculture' in branch)
-        ):
-            sector_map['Agriculture'].append(branch)
-        elif (
-                ('Demand\Industry' in branch) or
-                ('Transformation\Ethanol' in branch) or
-                ('Transformation\Biodiesel' in branch) or
-                ('Transformation\Refinery' in branch) or
-                ('Transformation\Renewable Diesel' in branch) or
-                ('Transformation\Crude Oil' in branch) or
-                ('Transformation\Steam Gen' in branch) or
-                ('Transformation\Hydrogen' in branch) or
-                ('Transformation\CNG' in branch) or
-                ('Transformation\CRNG' in branch) or
-                ('Transformation\RNG' in branch) or
-                ('NG Compressors' in branch) or
-                ('Non Energy\Industry' in branch) or
-                ('Non Energy\Carbon Removal\Industry' in branch) or
-                ('Non Energy\Carbon Removal\DAC' in branch)
-        ):
-            sector_map['Industry'].append(branch)
-
-        elif (
-                ('Transformation\Electricity' in branch) or
-                ('Non Energy\Electricity' in branch) or
-                ('Transformation\Distributed PV' in branch) or
-                ('Carbon Removal\Electricity Production' in branch)
-        ):
-            sector_map['Electricity'].append(branch)
-        elif (
-                ('Resources\\' in branch)
-        ):
-            sector_map['Resources'].append(branch)
-        elif (
-                ('Non Energy\Incentives' in branch)
-        ):
-            sector_map['Incentives'].append(branch)
-        else:
-            print(f"branch: {branch} not added to mapping")
-
-    return sector_map
-
-
 def plot_bar_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map, yaxis_col='Value',
                                 xaxis_col='Year', color_col='Subgroup', include_sum=True):
     fig = px.bar(
@@ -1513,6 +1385,25 @@ def plot_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict
         x='Value',
         y='Scenario',
         color=color_column,
+        color_discrete_map=color_dict,
+    )
+    if include_legend:
+        fig = update_legend_layout(fig, xaxis_title)
+    else:
+        fig.update_layout(showlegend=False)
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_plot_size(fig)
+    return fig
+
+
+def plot_grouped_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict, grouping_column,
+                                         color_column, include_legend=False):
+    fig = px.bar(
+        df,
+        x=grouping_column,
+        y='Value',
+        color=color_column,
+        barmode='group',
         color_discrete_map=color_dict,
     )
     if include_legend:
