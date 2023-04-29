@@ -6,10 +6,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from tqdm import tqdm
-import seaborn as sns
+
+
+INPUT_PATH = Path("resultsFiles/apr27_2023")
 
 DISCOUNT_RATE = 0.05
-INPUT_PATH = Path("resultsFiles/apr22_2023")
+BASE_YEAR = 2018
+END_YEAR = 2045
+TOTAL_YEARS = END_YEAR - BASE_YEAR + 1
+CAPITAL_RECOVERY_FACTOR = (DISCOUNT_RATE * ((1 + DISCOUNT_RATE) ** TOTAL_YEARS)) / \
+                          (((1 + DISCOUNT_RATE) ** TOTAL_YEARS) - 1)
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 FIGURES_PATH = INPUT_PATH / "figures"
@@ -18,6 +24,12 @@ COST_RESULT_STRING = "Social Costs"
 GENERATION_STRING = "Outputs by Output Fuel"
 CAPACITY_ADDED_STRING = "Capacity Added"
 ENERGY_DEMAND_STRING = "Energy Demand Final Units"
+INPUTS_STRING = "Inputs"
+FUELS_TO_COMBINE = {
+    "CRNG": "RNG",
+    "CNG": "NG",
+    "Hydrogen Transmitted": "Hydrogen"
+}
 
 
 def main():
@@ -30,29 +42,25 @@ def main():
     df_loads = create_scenario_copies(df_loads)
 
     # create color and branch maps
-    egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map, fuel_color_map = load_color_maps()
-    egen_branch_map_long, egen_branch_map_short = form_egen_branch_maps(df)
-    sector_branch_map = form_sector_branch_map(df)
+    color_maps = load_color_maps()        # keys are egen_resources, sectors, fuels
+    branch_maps = form_branch_maps(df)    # keys are the column names in the controller
 
     # make graphs of comparisons between scenarios
-    base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                                    egen_branch_map_long, egen_branch_map_short, sector_branch_map, fuel_color_map)
+    base_scenario_comparison_graphs(df, color_maps, branch_maps)
 
     # make graphs exploring individual scenarios
-    individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                               egen_branch_map_long, egen_branch_map_short, sector_branch_map, fuel_color_map)
+    individual_scenario_graphs(df, color_maps, branch_maps)
 
     # load shape graphs
-    load_shape_graphs(df_loads, sector_color_map)
+    load_shape_graphs(df_loads, color_maps)
 
     # Sensitivity graphs
-    sensitivity_graphs(df, sector_color_map, sector_branch_map)
+    sensitivity_graphs(df, color_maps, branch_maps)
 
     # TODO: RPS graphs
 
 
-def base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                                    egen_branch_map_long, egen_branch_map_short, sector_branch_map, fuel_color_map):
+def base_scenario_comparison_graphs(df, color_maps, branch_maps):
     """ Function to generate the graphs of all of the 'base' comparisons between scenarios """
 
     relevant_scenarios, scenario_comparison_params = load_sce_comps()
@@ -61,109 +69,117 @@ def base_scenario_comparison_graphs(df, egen_resource_color_map_long, egen_resou
     graph_emissions_over_time_scenario_comparisons(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
+        # branch_map=branch_maps['all_branches_together'],
+        branch_map=branch_maps['buildings_only'],
     )
     graph_marginal_cost_over_time_scenario_comparisons(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
+        branch_map=branch_maps['all_branches_together'],
     )
     graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
+        branch_map=branch_maps['all_branches_together'],
     )
     graph_cost_of_co2_abatement_bar(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
+        branch_map=branch_maps['all_branches_together'],
     )
     graph_egen_by_resource_scenario_comparison(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
-        color_map=egen_resource_color_map_long,
-        branch_map=egen_branch_map_long,
+        color_map=color_maps['egen_resources'],
+        branch_map=branch_maps['egen_resources_long'],
         file_suffix='long',
     )
     graph_egen_by_resource_scenario_comparison(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
-        color_map=egen_resource_color_map_short,
-        branch_map=egen_branch_map_short,
+        color_map=color_maps['egen_resources'],
+        branch_map=branch_maps['egen_resources_short'],
         file_suffix='short',
     )
     graph_cumulative_marginal_costs_by_sector_scenario_comparison(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
+        color_map=color_maps['sectors'],
+        branch_map=branch_maps['sectors'],
         year=2045,
     )
     graph_cumulative_marginal_abated_emissions_by_sector_scenario_comparison(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
+        color_map=color_maps['sectors'],
+        branch_map=branch_maps['sectors'],
         year=2045,
     )
     graph_annual_marginal_abated_emissions_by_sector_scenario_comparison(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
+        color_map=color_maps['sectors'],
+        branch_map=branch_maps['sectors'],
         year=2045,
     )
     graph_energy_demand_by_fuel_scenario_comparison_bar(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
-        color_map=fuel_color_map,
+        color_map=color_maps['fuels'],
+        branch_map=branch_maps['all_branches_together'],
         year=2045,
     )
-    # TODO: Energy demand over time scenario comparisons, marginal energy demand over time scenario comparisons
+    # TODO: Energy demand over time scenario comparisons,
+    #  marginal energy demand over time scenario comparisons (filtered for a specific fuel)
 
 
-def individual_scenario_graphs(df, egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map,
-                               egen_branch_map_long, egen_branch_map_short, sector_branch_map, fuel_color_map):
+def individual_scenario_graphs(df, color_maps, branch_maps):
 
     relevant_scenarios, individual_sce_graph_params = load_individual_scenarios()
     df_individual_scenarios = df[df['Scenario'].isin(relevant_scenarios)]
+
     graph_marginal_costs_by_sector_over_time(
         df_in=df_individual_scenarios,
         individual_sce_graph_params=individual_sce_graph_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
+        color_map=color_maps['sectors'],
+        branch_map=branch_maps['sectors'],
     )
     graph_marginal_emissions_by_sector_over_time(
         df_in=df_individual_scenarios,
         individual_sce_graph_params=individual_sce_graph_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
+        color_map=color_maps['sectors'],
+        branch_map=branch_maps['sectors'],
     )
     graph_emissions_by_sector_over_time(
         df_in=df_individual_scenarios,
         individual_sce_graph_params=individual_sce_graph_params,
-        color_map=sector_color_map,
-        branch_map=sector_branch_map,
+        color_map=color_maps['sectors'],
+        branch_map=branch_maps['sectors'],
     )
     graph_egen_by_resource_over_time(
         df_in=df_individual_scenarios,
         individual_sce_graph_params=individual_sce_graph_params,
-        color_map=egen_resource_color_map_short,
-        branch_map=egen_branch_map_short,
+        color_map=color_maps['egen_resources'],
+        branch_map=branch_maps['egen_resources_short'],
         suffix='short'
     )
     graph_cumulative_egen_capacity_added_over_time(
         df_in=df_individual_scenarios,
         individual_sce_graph_params=individual_sce_graph_params,
-        color_map=egen_resource_color_map_short,
-        branch_map=egen_branch_map_short,
+        color_map=color_maps['egen_resources'],
+        branch_map=branch_maps['egen_resources_short'],
         suffix='short'
     )
     graph_energy_demand_by_fuel_over_time(
         df_in=df_individual_scenarios,
         individual_sce_graph_params=individual_sce_graph_params,
-        color_map=fuel_color_map,
+        color_map=color_maps['fuels'],
+        branch_map=branch_maps['fuel_use']
     )
     # TODO: energy demand over time by fuel, marginal energy demand over time by fuel
 
 
-def load_shape_graphs(df_loads, sector_color_map):
+def load_shape_graphs(df_loads, color_maps):
     load_scenarios_to_compare, load_scenario_comparison_params = load_load_comps()
     df_load_comparison = df_loads[df_loads['Scenario'].isin(load_scenarios_to_compare)]
     graph_load_comparison(
@@ -176,48 +192,51 @@ def load_shape_graphs(df_loads, sector_color_map):
     graph_load_by_sector(
         df_in=df_individual_loads,
         params=individual_load_params,
-        color_map=sector_color_map,
+        color_map=color_maps['sectors'],
     )
 
 
-def sensitivity_graphs(df, sector_color_map, sector_branch_map):
+def sensitivity_graphs(df, color_maps, branch_maps):
     tech_choice_relevant_scenarios, tech_choice_graph_params = load_tech_choice_graph_params()
     graph_tech_choice_emissions(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
         stacked=False,
-        branch_map=sector_branch_map,
-        color_map=sector_color_map,
+        branch_map=branch_maps['all_branches_together'],
+        color_map=color_maps['sectors'],
         year=2045,
     )
+    # stacked bar chart (stacked by sector
     graph_tech_choice_emissions(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
         stacked=True,
-        branch_map=sector_branch_map,
-        color_map=sector_color_map,
+        branch_map=branch_maps['sectors'],
+        color_map=color_maps['sectors'],
         year=2045,
     )
     graph_tech_choice_marginal_cost(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
         stacked=False,
-        branch_map=sector_branch_map,
-        color_map=sector_color_map,
+        branch_map=branch_maps['all_branches_together'],
+        color_map=color_maps['sectors'],
         year=2045,
     )
+    # stacked bar chart (stacked by sector)
     graph_tech_choice_marginal_cost(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
         stacked=True,
-        branch_map=sector_branch_map,
-        color_map=sector_color_map,
+        branch_map=branch_maps['sectors'],
+        color_map=color_maps['sectors'],
         year=2045,
     )
     graph_tech_choice_cost_of_abatement(
         df_in=df[df['Scenario'].isin(tech_choice_relevant_scenarios)],
         tech_choice_graph_params=tech_choice_graph_params,
-        color_map=sector_color_map,
+        branch_map=branch_maps['all_branches_together'],
+        color_map=color_maps['sectors'],
     )
 
 
@@ -346,6 +365,40 @@ def remove_instate_incentives(df, scenario_dict):
     ] = 0
 
     return df
+
+
+def form_branch_maps(df_results):
+
+    # for set of all branches included in the results
+    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
+    all_branches = set(df_results.columns) - set(id_cols)
+
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="branch_maps")
+
+    # check if there are any branches missing from the controller
+    missing_branches = list(all_branches - set(df['Branch'].unique()))
+    if len(missing_branches) > 0:
+        print(f"Branches not included in controller: {missing_branches}")
+
+    # form maps of branches
+    branch_maps = dict()
+    maps = df.columns.tolist()
+    maps.remove('Branch')
+
+    # iterate through columns in the controller
+    for map in maps:
+        branch_maps[map] = dict()
+
+        df_map = df[['Branch'] + [map]].copy()
+
+        # map unique sector (or other variable) to relevant branches
+        for key, dfg in df_map.groupby(map):
+            if key == False:
+                continue
+            value_branches = dfg['Branch'].tolist()
+            branch_maps[map][key] = value_branches
+
+    return branch_maps
 
 
 def load_load_shapes(reload):
@@ -501,20 +554,39 @@ def load_individual_load_params():
     return list(relevant_scenarios), individual_load_params
 
 
+def load_tech_choice_graph_params():
+    """ Function to load scenario comparisons as dictated in controller """
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="tech_choice_plots")
+
+    relevant_scenarios = set(df['Scenario'].unique())
+    relevant_scenarios.update(set(df['Relative to'].unique()))
+
+    scenario_comp_params = []
+    for _, dfg in df.groupby('Plot'):
+        params = dict()
+        params['scenarios'] = dfg['Scenario'].tolist()
+        params['relative_to'] = dfg['Relative to'].unique()[0]
+        params['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
+        params['sector_map'] = dict(zip(dfg['Scenario'], dfg['Sector']))
+        scenario_comp_params.append(params)
+
+    return list(relevant_scenarios), scenario_comp_params
+
+
 def load_color_maps():
     """ Function to load color maps from controller """
+    color_maps = dict()
 
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="egen_resource_colors")
-    egen_resource_color_map_long = dict(zip(df[df['Length'] == 'Long']['Resource'], df[df['Length'] == 'Long']['Color']))
-    egen_resource_color_map_short = dict(zip(df[df['Length'] == 'Short']['Resource'], df[df['Length'] == 'Short']['Color']))
+    color_maps['egen_resources'] = dict(zip(df['Resource'], df['Color']))
 
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="sector_colors")
-    sector_color_map = dict(zip(df['Sector'], df['Color']))
+    color_maps['sectors'] = dict(zip(df['Sector'], df['Color']))
 
     df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="fuel_colors")
-    fuel_color_map = dict(zip(df['Fuel'], df['Color']))
+    color_maps['fuels'] = dict(zip(df['Fuel'], df['Color']))
 
-    return egen_resource_color_map_long, egen_resource_color_map_short, sector_color_map, fuel_color_map
+    return color_maps
 
 
 def calculate_annual_result_by_subgroup(df_in, result_str, subgroup_dict):
@@ -522,7 +594,12 @@ def calculate_annual_result_by_subgroup(df_in, result_str, subgroup_dict):
 
     df_out = pd.DataFrame(columns=['Year', 'Scenario', 'Fuel', 'Subgroup', 'Value'])
 
-    for key, dfg in df_in[df_in['Result Variable'] == result_str].groupby(by=['Year', 'Scenario', 'Fuel']):
+    # convert result_str to list so that multiple result_strings can be passed into the function as a list
+    # note this is useful for energy demand and inputs
+    if type(result_str) == str:
+        result_str = [result_str]
+
+    for key, dfg in df_in[df_in['Result Variable'].isin(result_str)].groupby(by=['Year', 'Scenario', 'Fuel']):
         yr, sce, fuel = key
         mask = np.array(
             (dfg['Year'] == yr) &
@@ -595,14 +672,36 @@ def cumsum_it(df):
     return df
 
 
-def graph_emissions_over_time_scenario_comparisons(df_in, scenario_comparison_params):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
+def evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to):
+    df_cost = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, subgroup_dict)
+    df_cost = marginalize_it(df_cost, relative_to)
+    df_cost = discount_it(df_cost)
+    df_cost = cumsum_it(df_cost)
+    df_cost = df_cost.rename(columns={'Value': 'cumulative_marginal_cost'})
 
-    df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
+    df_emissions = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
+    df_emissions = marginalize_it(df_emissions, relative_to)
+    df_emissions = cumsum_it(df_emissions)
+    df_emissions = df_emissions.rename(columns={'Value': 'cumulative_marginal_emissions'})
+
+    df = df_emissions.merge(df_cost, how='outer', on=['Scenario', 'Subgroup', 'Year'])
+
+    return df
+
+
+def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to):
+    df = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to)
+    df = df[df['Year'] == END_YEAR].copy()
+    df['annualized_cost'] = df['cumulative_marginal_cost'] * CAPITAL_RECOVERY_FACTOR
+    df['annualized_emissions_reduction'] = -1 * df['cumulative_marginal_emissions'] / TOTAL_YEARS
+    df['cost_of_abatement'] = df['annualized_cost'] / df['annualized_emissions_reduction']
+
+    return df
+
+
+def graph_emissions_over_time_scenario_comparisons(df_in, scenario_comparison_params, branch_map):
+
+    df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, branch_map)
     df['Value'] = df['Value'] / 1e6
 
     for i, params in enumerate(scenario_comparison_params):
@@ -617,16 +716,10 @@ def graph_emissions_over_time_scenario_comparisons(df_in, scenario_comparison_pa
             fig.write_image(FIGURES_PATH / f"emissions_over_time{i}.pdf")
 
 
-def graph_marginal_cost_over_time_scenario_comparisons(df_in, scenario_comparison_params):
+def graph_marginal_cost_over_time_scenario_comparisons(df_in, scenario_comparison_params, branch_map):
 
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
-
-    # Evaluate cost in Billions of Dollary
-    df = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, subgroup_dict)
+    # Evaluate cost in Billions of Dollars
+    df = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, branch_map)
     df['Value'] = df['Value'] / 1e9
 
     for i, params in enumerate(scenario_comparison_params):
@@ -644,43 +737,21 @@ def graph_marginal_cost_over_time_scenario_comparisons(df_in, scenario_compariso
             fig.write_image(FIGURES_PATH / f"marginal_cost_over_time{i}.pdf")
 
 
-# TODO: get rid of default relative_to value
-def evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to='LEAP Version CARB Reference_0_nan'):
-    df_cost = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, subgroup_dict)
-    df_cost = marginalize_it(df_cost, relative_to)
-    df_cost = discount_it(df_cost)
-    df_cost = cumsum_it(df_cost)
-    df_cost = df_cost.rename(columns={'Value': 'cumulative_marginal_cost'})
-
-    df_emissions = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, subgroup_dict)
-    df_emissions = marginalize_it(df_emissions, relative_to)
-    df_emissions = cumsum_it(df_emissions)
-    df_emissions = df_emissions.rename(columns={'Value': 'cumulative_marginal_emissions'})
-
-    df = df_emissions.merge(df_cost, how='outer', on=['Scenario', 'Subgroup', 'Year'])
-
-    return df
-
-
-def graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(df_in, scenario_comparison_params):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
+def graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(df_in, scenario_comparison_params,
+                                                                          branch_map):
 
     for i, params in enumerate(scenario_comparison_params):
         if params['marginal_emissions_vs_marginal_cost']:
             # evaluate cumulative marginal emissions and cumulative marginal cost
             relevant_scenarios = params['scenarios'] + [params['relative_to']]
             df = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(
-                df_in[df_in['Scenario'].isin(relevant_scenarios)].copy(),
-                subgroup_dict,
-                params['relative_to']
+                df_in=df_in[df_in['Scenario'].isin(relevant_scenarios)].copy(),
+                subgroup_dict=branch_map,
+                relative_to=params['relative_to'],
             )
 
             # Only use the final year
-            df = df[df['Year'] == df['Year'].max()].copy()
+            df = df[df['Year'] == END_YEAR].copy()
 
             # Units of Billion tonnes and Billion dollars
             df['cumulative_marginal_cost'] = df['cumulative_marginal_cost'] / 1e9
@@ -700,27 +771,22 @@ def graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(df_in,
             fig.write_image(FIGURES_PATH / f"marginal_emissions_vs_marginal_cost{i}.pdf")
 
 
-def graph_cost_of_co2_abatement_bar(df_in, scenario_comparison_params):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
+def graph_cost_of_co2_abatement_bar(df_in, scenario_comparison_params, branch_map):
+
 
     for i, params in enumerate(scenario_comparison_params):
         if params['cost_of_co2_abatement']:
 
             # filter out irrelevant scenarios evaluate cumulative marg. emissions and cumulative marg. cost
             relevant_scenarios = params['scenarios'] + [params['relative_to']]
-            df = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(
-                df_in[df_in['Scenario'].isin(relevant_scenarios)].copy(),
-                subgroup_dict,
-                params['relative_to']
-            )
-            df = df[df['Year'] == df['Year'].max()].copy()  # filter to end year
 
-            # evaluate $/ton
-            df['Value'] = -1 * df['cumulative_marginal_cost'] / df['cumulative_marginal_emissions']
+            df = evaluate_dollar_per_ton_abated(
+                df_in=df_in[df_in['Scenario'].isin(relevant_scenarios)].copy(),
+                subgroup_dict=branch_map,
+                relative_to=params['relative_to']
+            )
+
+            df['Value'] = df['cost_of_abatement']
 
             # filter out irrelevant scenarios and rename scenarios
             df = df[df['Scenario'].isin(params['scenarios'])].copy()
@@ -763,7 +829,7 @@ def graph_egen_by_resource_scenario_comparison(df_in, scenario_comparison_params
 
 
 def graph_cumulative_marginal_costs_by_sector_scenario_comparison(df_in, scenario_comparison_params,
-                                                                  color_map, branch_map, year=2045):
+                                                                  color_map, branch_map, year=END_YEAR):
 
     for i, params in enumerate(scenario_comparison_params):
         if params['cumulative_marginal_cost_by_sector']:
@@ -799,7 +865,7 @@ def graph_cumulative_marginal_costs_by_sector_scenario_comparison(df_in, scenari
 
 
 def graph_cumulative_marginal_abated_emissions_by_sector_scenario_comparison(df_in, scenario_comparison_params,
-                                                                             color_map, branch_map, year=2045):
+                                                                             color_map, branch_map, year=END_YEAR):
 
     for i, params in enumerate(scenario_comparison_params):
         if params['cumulative_marginal_abated_emissions_by_sector']:
@@ -829,7 +895,7 @@ def graph_cumulative_marginal_abated_emissions_by_sector_scenario_comparison(df_
 
 
 def graph_annual_marginal_abated_emissions_by_sector_scenario_comparison(df_in, scenario_comparison_params, color_map,
-                                                                         branch_map, year=2045):
+                                                                         branch_map, year=END_YEAR):
     df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, branch_map)
     df['Value'] = -1 * df['Value'] / 1e6    # units of millions
 
@@ -853,15 +919,15 @@ def graph_annual_marginal_abated_emissions_by_sector_scenario_comparison(df_in, 
             fig.write_image(FIGURES_PATH / f"annual_marginal_emissions_by_sector_{i}.pdf")
 
 
-def graph_energy_demand_by_fuel_scenario_comparison_bar(df_in, scenario_comparison_params, color_map, year=2045):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
+def graph_energy_demand_by_fuel_scenario_comparison_bar(df_in, scenario_comparison_params, color_map, branch_map,
+                                                        year=2045):
 
-    df = calculate_annual_result_by_subgroup(df_in, ENERGY_DEMAND_STRING, subgroup_dict)
+    df = calculate_annual_result_by_subgroup(df_in, [ENERGY_DEMAND_STRING, INPUTS_STRING], branch_map)
     df = df[df['Year'] == year]
+    df = df.replace({"Fuel": FUELS_TO_COMBINE})
+    df = df[df['Fuel'] != "Other"].copy()
+    # TODO: groupby fuel to combine energy demand final units with inputs
+    # df = df.groupby()
 
     for i, params in enumerate(scenario_comparison_params):
         if params['energy_demand_by_fuel']:
@@ -907,8 +973,7 @@ def graph_marginal_costs_by_sector_over_time(df_in, individual_sce_graph_params,
             fig.write_image(FIGURES_PATH / f"marginal_cost_over_time_by_sector_{params['id']}.pdf")
 
 
-def graph_marginal_emissions_by_sector_over_time(df_in, individual_sce_graph_params,
-                                                 color_map, branch_map, relative_to='LEAP Version CARB Reference_0_nan'):
+def graph_marginal_emissions_by_sector_over_time(df_in, individual_sce_graph_params, color_map, branch_map):
 
     df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, branch_map)
 
@@ -936,8 +1001,7 @@ def graph_marginal_emissions_by_sector_over_time(df_in, individual_sce_graph_par
             fig.write_image(FIGURES_PATH / f"marginal_emissions_by_sector_over_time_{params['id']}.pdf")
 
 
-def graph_emissions_by_sector_over_time(df_in, individual_sce_graph_params,
-                                        color_map, branch_map):
+def graph_emissions_by_sector_over_time(df_in, individual_sce_graph_params, color_map, branch_map):
 
     df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, branch_map)
     df['Value'] = df['Value'] / 1e6
@@ -956,8 +1020,7 @@ def graph_emissions_by_sector_over_time(df_in, individual_sce_graph_params,
             fig.write_image(FIGURES_PATH / f"emissions_by_sector_over_time_{params['id']}.pdf")
 
 
-def graph_egen_by_resource_over_time(df_in, individual_sce_graph_params,
-                                     color_map, branch_map, suffix):
+def graph_egen_by_resource_over_time(df_in, individual_sce_graph_params, color_map, branch_map, suffix):
     df = calculate_annual_result_by_subgroup(df_in, GENERATION_STRING, branch_map)
     df['Value'] = df['Value'] / 1e9
 
@@ -986,7 +1049,7 @@ def graph_cumulative_egen_capacity_added_over_time(df_in, individual_sce_graph_p
             name = params['name']
             fig = plot_bar_subgroup_over_time(
                 df=df[df['Scenario'] == params['scenario']],
-                title=f'Egen Capacity Added by Resource<br>{name}',
+                title=f'Cumulative New Electricity Generation Capacity <br>{name}',
                 xaxis_title='',
                 yaxis_title='GW',
                 color_map=color_map,
@@ -995,14 +1058,11 @@ def graph_cumulative_egen_capacity_added_over_time(df_in, individual_sce_graph_p
             fig.write_image(FIGURES_PATH / f"egen_capacity_added_over_time_{suffix}_{params['id']}.pdf")
 
 
-def graph_energy_demand_by_fuel_over_time(df_in, individual_sce_graph_params, color_map):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
+def graph_energy_demand_by_fuel_over_time(df_in, individual_sce_graph_params, color_map, branch_map):
 
-    df = calculate_annual_result_by_subgroup(df_in, ENERGY_DEMAND_STRING, subgroup_dict)
+    df = calculate_annual_result_by_subgroup(df_in, [ENERGY_DEMAND_STRING, INPUTS_STRING], branch_map)
+    df = df.replace({"Fuel": FUELS_TO_COMBINE})
+    df = df[df['Fuel'] != "Other"].copy()
 
     for params in individual_sce_graph_params:
         if params['energy_demand_by_fuel']:
@@ -1021,34 +1081,9 @@ def graph_energy_demand_by_fuel_over_time(df_in, individual_sce_graph_params, co
             fig.write_image(FIGURES_PATH / f"energy_demand_by_fuel_over_time_{params['id']}.pdf")
 
 
-
-def load_tech_choice_graph_params():
-    """ Function to load scenario comparisons as dictated in controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="tech_choice_plots")
-
-    relevant_scenarios = set(df['Scenario'].unique())
-    relevant_scenarios.update(set(df['Relative to'].unique()))
-
-    scenario_comp_params = []
-    for _, dfg in df.groupby('Plot'):
-        params = dict()
-        params['scenarios'] = dfg['Scenario'].tolist()
-        params['relative_to'] = dfg['Relative to'].unique()[0]
-        params['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
-        params['sector_map'] = dict(zip(dfg['Scenario'], dfg['Sector']))
-        scenario_comp_params.append(params)
-
-    return list(relevant_scenarios), scenario_comp_params
-
-
-def graph_tech_choice_emissions(df_in, tech_choice_graph_params, stacked, branch_map, color_map, year=2045):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
+def graph_tech_choice_emissions(df_in, tech_choice_graph_params, stacked, branch_map, color_map, year=END_YEAR):
 
     if not stacked:
-        branch_map = {
-            'all_branches': result_cols,
-        }
         color_col = 'Sector'
     else:
         color_col = 'Subgroup'
@@ -1083,15 +1118,9 @@ def graph_tech_choice_emissions(df_in, tech_choice_graph_params, stacked, branch
             fig.write_image(FIGURES_PATH / f"tech_choice_emissions{i}.pdf")
 
 
-
 def graph_tech_choice_marginal_cost(df_in, tech_choice_graph_params, stacked, branch_map, color_map, year=2045):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
 
     if not stacked:
-        branch_map = {
-            'all_branches': result_cols,
-        }
         color_col = 'Sector'
     else:
         color_col = 'Subgroup'
@@ -1128,21 +1157,12 @@ def graph_tech_choice_marginal_cost(df_in, tech_choice_graph_params, stacked, br
             fig.write_image(FIGURES_PATH / f"tech_choice_costs_{i}.pdf")
 
 
-def graph_tech_choice_cost_of_abatement(df_in, tech_choice_graph_params, color_map):
-    id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
-    result_cols = list(set(df_in.columns) - set(id_cols))
-    subgroup_dict = {
-        'all_branches': result_cols,
-    }
+def graph_tech_choice_cost_of_abatement(df_in, tech_choice_graph_params, color_map, branch_map):
 
     for i, params in enumerate(tech_choice_graph_params):
-        relative_to = params['relative_to']
-        df_graph = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to)
-        df_graph = df_graph[
-            (df_graph['Scenario'].isin(params['scenarios'])) &
-            (df_graph['Year'] == df_graph['Year'].max())
-             ].copy()
-        df_graph['Value'] = -1 * df_graph['cumulative_marginal_cost'] / df_graph['cumulative_marginal_emissions']
+
+        df_graph = evaluate_dollar_per_ton_abated(df_in, branch_map, params['relative_to'])
+        df_graph['Value'] = df_graph['cost_of_abatement']
         df_graph['Sector'] = df_graph['Scenario'].map(params['sector_map'])
         df_graph = df_graph.replace({'Scenario': params['name_map']})
         df_graph = df_graph.sort_values(by=['Sector', 'Scenario'])
