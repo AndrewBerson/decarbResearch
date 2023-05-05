@@ -595,6 +595,27 @@ def load_tech_choice_graph_params():
     return list(relevant_scenarios), scenario_comp_params
 
 
+def load_different_xaxis_graph_params():
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="different_xaxis_plots")
+
+    relevant_scenarios = set(df['Scenario'].unique())
+    relevant_scenarios.update(set(df['Relative to'].unique()))
+
+    scenario_comp_params = []
+    for _, dfg in df.groupby('Plot'):
+        params = dict()
+        params['id'] = dfg['Plot'].unique()[0]
+        params['scenarios'] = dfg['Scenario'].tolist()
+        params['relevant_scenarios'] = list(set(dfg['Scenario'].tolist() + dfg['Relative to'].tolist()))
+        params['xaxis_val_map'] = dict(zip(dfg['Scenario'], dfg['xaxis_value']))
+        params['xaxis_title'] = dfg['xaxis_title'].unique()[0]
+        params['relative_to_map'] = dict(zip(dfg['Scenario'], dfg['Relative to']))
+        params['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
+        scenario_comp_params.append(params)
+
+    return list(relevant_scenarios), scenario_comp_params
+
+
 def load_color_maps():
     """ Function to load color maps from controller """
     color_maps = dict()
@@ -612,7 +633,13 @@ def load_color_maps():
 
 
 def calculate_annual_result_by_subgroup(df_in, result_str, subgroup_dict):
-    """ Function to calculate annual result summed branch subgroups for all scenarios """
+    """
+    Function to sum the result variable in each year for the branches in each key/value pairing of subgroup dict
+    :param df_in: dataframe containing all relevant results
+    :param result_str: either a string or list of the relevant results (eg: Output by Output Fuel)
+    :param subgroup_dict: dictionary mapping groups to their relevant branches (Eg: 'buildings' --> [Demand\Residential...]
+    :return: dataframe with cols Year, Scenario, Fuel, Subgroup, Value. Subgroups are the keys of the subgroup_dict
+    """
 
     df_out = pd.DataFrame(columns=['Year', 'Scenario', 'Fuel', 'Subgroup', 'Value'])
 
@@ -637,6 +664,14 @@ def calculate_annual_result_by_subgroup(df_in, result_str, subgroup_dict):
 
 
 def marginalize_it(df_in, relative_to_dict):
+    """
+    Function to calculate marginal result
+    :param df_in: Dataframe containing the following cols: Year, Scenario, Fuel, Subgroup, Value. The 'Value' column
+    is marginalized against other columns that contain the same year, fuel, and subgroup
+    :param relative_to_dict: dictionary where the keys are scenarios and the values are that the key should be
+    marginalized against
+    :return: dataframe where all of the scenarios in relative_to_dict have been marginalized
+    """
 
     df_out = df_in.copy()
 
@@ -671,6 +706,11 @@ def marginalize_it(df_in, relative_to_dict):
 
 
 def discount_it(df_in):
+    """
+    Function to discount all costs
+    :param df_in: dataframe containing results with cols Year, Scenario, Fuel, Subgroup, Value
+    :return: dataframe with discounted costs
+    """
     df = df_in.copy()
     yrs = np.sort(df['Year'].unique())
     base_yr = yrs[0]
@@ -690,13 +730,19 @@ def discount_it(df_in):
 
 
 def cumsum_it(df_in):
+    """
+    Function to calculate cumulative sum of 'Value' column across years and separated by Scenario, subgroup, and fuel
+    :param df_in: dataframe containing results with cols Year, Scenario, Fuel, Subgroup, Value
+    :return: dataframe with 'Value' column now containing the cumulative sum beginning from the base year
+    """
     df = df_in.copy()
     df = df.sort_values(by='Year', axis=0)
-    for key, dfg in df.groupby(by=['Scenario', 'Subgroup']):
-        sce, subg = key
+    for key, dfg in df.groupby(by=['Scenario', 'Subgroup', 'Fuel']):
+        sce, subg, fuel = key
         mask = np.array(
             (df['Scenario'] == sce) &
-            (df['Subgroup'] == subg)
+            (df['Subgroup'] == subg) &
+            (df['Fuel'] == fuel)
         )
         ids = list(np.where(mask)[0])
         df.iloc[ids, df.columns.get_loc('Value')] = dfg['Value'].cumsum(axis=0)
@@ -705,6 +751,13 @@ def cumsum_it(df_in):
 
 
 def evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to_map):
+    """
+    Function to evaluate cumulative marginal emissions and cumulative marginal costs
+    :param df_in: raw results from LEAP script
+    :param subgroup_dict: dict mapping subgroup --> list of relevant branches
+    :param relative_to_map: dict mapping scenario --> scenario to marginalize against
+    :return: dataframe containing cols 'cumulative_marginal_cost' and 'cumulative_marginal_emissions'
+    """
     df_cost = calculate_annual_result_by_subgroup(df_in, COST_RESULT_STRING, subgroup_dict)
     df_cost = marginalize_it(df_cost, relative_to_map)
     df_cost = discount_it(df_cost)
@@ -722,6 +775,13 @@ def evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgr
 
 
 def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
+    """
+    Function to evalute the cost of abatement
+    :param df_in: dataframe containing results
+    :param subgroup_dict: dict mapping subgroup --> list of branches
+    :param relative_to_map: dict mapping scenario --> scenario it should be marginalized against
+    :return: df containing col 'cost_of_abatement'
+    """
     df = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to_map)
     df = df[df['Year'] == END_YEAR].copy()
     df['annualized_cost'] = df['cumulative_marginal_cost'] * CAPITAL_RECOVERY_FACTOR
@@ -1242,6 +1302,13 @@ def graph_tech_choice_cost_of_abatement(df_in, tech_choice_graph_params, color_m
             fig = update_to_tall_fig(fig)
         # fig.update_layout(xaxis_range=[-500, 500])
         fig.write_image(FIGURES_PATH / f"tech_choice_cost_of_abatement_{i}.pdf")
+
+
+def graph_annual_emissions_different_xaxis(df_in, diff_xaxis_graph_params, color_map, branch_map, stacked, year=END_YEAR):
+    pass
+    #
+    # for params in diff_xaxis_graph_params:
+    #     df_graph = calculate_annual_result_by_subgroup(df_in, )
 
 
 def graph_load_by_sector(df_in, params, color_map):
