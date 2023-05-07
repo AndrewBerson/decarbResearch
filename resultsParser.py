@@ -67,7 +67,20 @@ def main():
     # Sensitivity graphs
     sensitivity_graphs(df, color_maps, branch_maps)
 
-    # TODO: RPS graphs
+    diff_xaxis_graphs(df, color_maps, branch_maps)
+
+
+def diff_xaxis_graphs(df, color_maps, branch_maps):
+    relevant_scenarios, params = load_different_xaxis_graph_params()
+
+    graph_annual_emissions_different_xaxis(
+        df_in=df[df['Scenario'].isin(relevant_scenarios)].copy(),
+        diff_xaxis_graph_params=params,
+        color_map=color_maps['sectors'],
+        branch_map=branch_maps['sectors'],
+        stacked=True,
+        year=END_YEAR,
+    )
 
 
 def base_scenario_comparison_graphs(df, color_maps, branch_maps):
@@ -607,7 +620,7 @@ def load_different_xaxis_graph_params():
         params['id'] = dfg['Plot'].unique()[0]
         params['scenarios'] = dfg['Scenario'].tolist()
         params['relevant_scenarios'] = list(set(dfg['Scenario'].tolist() + dfg['Relative to'].tolist()))
-        params['xaxis_val_map'] = dict(zip(dfg['Scenario'], dfg['xaxis_value']))
+        params['xval_map'] = dict(zip(dfg['Scenario'], dfg['xaxis_value']))
         params['xaxis_title'] = dfg['xaxis_title'].unique()[0]
         params['relative_to_map'] = dict(zip(dfg['Scenario'], dfg['Relative to']))
         params['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
@@ -780,7 +793,7 @@ def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
     :param df_in: dataframe containing results
     :param subgroup_dict: dict mapping subgroup --> list of branches
     :param relative_to_map: dict mapping scenario --> scenario it should be marginalized against
-    :return: df containing col 'cost_of_abatement'
+    :return: df containing col 'cost_of_abatement' for year == End year
     """
     df = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to_map)
     df = df[df['Year'] == END_YEAR].copy()
@@ -1305,10 +1318,25 @@ def graph_tech_choice_cost_of_abatement(df_in, tech_choice_graph_params, color_m
 
 
 def graph_annual_emissions_different_xaxis(df_in, diff_xaxis_graph_params, color_map, branch_map, stacked, year=END_YEAR):
-    pass
-    #
-    # for params in diff_xaxis_graph_params:
-    #     df_graph = calculate_annual_result_by_subgroup(df_in, )
+
+    for params in diff_xaxis_graph_params:
+        df_graph = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, branch_map)
+        df_graph['Value'] = df_graph['Value'] * 1e-6
+        df_graph = df_graph[df_graph['Year'] == year].copy()
+        df_graph['xval'] = df_graph['Scenario'].map(params['xval_map'])
+
+        fig = plot_bar_scenario_comparison(
+            df=df_graph,
+            title=f'Annual emissions in {year}',
+            xaxis_title=params['xaxis_title'],
+            yaxis_title='Emissions',
+            color_dict=color_map,
+            color_column='Subgroup',
+            include_legend=False,
+            xcol='xval',
+            ycol='Value'
+        )
+        fig.write_image(FIGURES_PATH / f"test123_{params['id']}.pdf")
 
 
 def graph_load_by_sector(df_in, params, color_map):
@@ -1500,12 +1528,25 @@ def plot_area_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map,
 
 
 def plot_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict, color_column='Subgroup',
-                                 include_legend=False):
+                                 include_legend=False, xcol='Value', ycol='Scenario'):
+    """
+
+    :param df:
+    :param title:
+    :param xaxis_title:
+    :param yaxis_title:
+    :param color_dict:
+    :param color_column:
+    :param include_legend:
+    :param xcol:
+    :param ycol:
+    :return:
+    """
 
     fig = px.bar(
         df,
-        x='Value',
-        y='Scenario',
+        x=xcol,
+        y=ycol,
         color=color_column,
         color_discrete_map=color_dict,
     )
