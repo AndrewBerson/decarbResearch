@@ -43,7 +43,7 @@ RESOURCE_PROXY = {
 
 
 def main():
-    reload_results = True    # set to True if using a new raw results excel document
+    reload_results = False    # set to True if using a new raw results excel document
 
     # load data and make copies of scenarios specified in the controller
     df = load_data(reload=reload_results)
@@ -67,6 +67,7 @@ def main():
     # Sensitivity graphs
     sensitivity_graphs(df, color_maps, branch_maps)
 
+    # Plots where the x-axis values are set in the controller
     diff_xaxis_graphs(df, color_maps, branch_maps)
 
 
@@ -494,6 +495,7 @@ def load_sce_comps():
         # scenario to marginalize relative to
         params['relative_to_map'] = dict(zip(dfg['Scenario'], dfg['Relative to']))
 
+        # TODO: read in these columns through a for loop
         # Load parameter dictating whether each specific graph is generated
         params['emissions_over_time'] = dfg['emissions over time'].unique()[0]
         params['marginal_emissions_over_time'] = dfg['marginal emissions over time'].unique()[0]
