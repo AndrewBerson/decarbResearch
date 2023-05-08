@@ -8,7 +8,7 @@ import os
 from tqdm import tqdm
 
 # Paths
-INPUT_PATH = Path("resultsFiles/apr27_2023")
+INPUT_PATH = Path("resultsFiles/may7_2023")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 FIGURES_PATH = INPUT_PATH / "figures"
@@ -43,7 +43,7 @@ RESOURCE_PROXY = {
 
 
 def main():
-    reload_results = False    # set to True if using a new raw results excel document
+    reload_results = True    # set to True if using a new raw results excel document
 
     # load data and make copies of scenarios specified in the controller
     df = load_data(reload=reload_results)
@@ -290,8 +290,11 @@ def load_all_files(input_path, sheet="Results"):
     added_scenarios = set()
 
     # iterate through all files and combine the datasets from the excel documents
+    this_list = os.listdir(input_path)
+    this_list.sort(reverse = True)
     i = 0
-    for fname in os.listdir(input_path):
+    for fname in this_list:
+        print(fname)
         f = os.path.join(input_path, fname)
         if os.path.isfile(f) and (fname[0] not in [".", "~"]):
             df_excel = pd.read_excel(f, sheet_name=sheet)
@@ -372,7 +375,7 @@ def reformat(df_excel):
 
 def create_scenario_copies(df):
     """ Function to create copies of specified scenarios under a new name"""
-    df_excel = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="scenario_copies")
+    df_excel = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="scenario_copies")
 
     sce_copy_dict = dict(zip(df_excel['Copy Name'], df_excel['Original Scenario']))
     sce_instate_incentive_on_off_dict = dict(zip(df_excel['Copy Name'], df_excel['In State Incentives']))
@@ -405,7 +408,7 @@ def form_branch_maps(df_results):
     id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
     all_branches = set(df_results.columns) - set(id_cols)
 
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="branch_maps")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="branch_maps")
 
     # check if there are any branches missing from the controller
     missing_branches = list(all_branches - set(df['Branch'].unique()))
@@ -461,7 +464,7 @@ def load_load_shapes(reload):
 
 def load_sce_comps():
     """ Function to load scenario comparisons as dictated in controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="base_scenario_comparisons")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="base_scenario_comparisons")
 
     relevant_scenarios = set(df['Scenario'].unique())
     relevant_scenarios.update(set(df['Relative to'].unique()))
@@ -510,7 +513,7 @@ def load_sce_comps():
 
 def load_individual_scenarios():
     """ Function to load scenario comparisons as dictated in controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="individual_scenario_graphs")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="individual_scenario_graphs")
 
     relevant_scenarios = set(df['Scenario'].unique())
     relevant_scenarios.update(set(df['Relative to'].unique()))
@@ -542,7 +545,7 @@ def load_load_comps():
     """ Function to load scenario comparisons as dictated in controller """
 
     # load data related to comparisons between different scenarios
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="load_shape_comparisons")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="load_shape_comparisons")
     relevant_scenarios = set(df['Scenario'].unique())
 
     scenario_comp_params = []
@@ -571,7 +574,7 @@ def load_load_comps():
 def load_individual_load_params():
 
     # load data for graphs about single scenarios
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="individual_load_shapes")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="individual_load_shapes")
     relevant_scenarios = set(df['Scenario'].unique())
 
     individual_load_params = []
@@ -590,7 +593,7 @@ def load_individual_load_params():
 
 def load_tech_choice_graph_params():
     """ Function to load scenario comparisons as dictated in controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="tech_choice_plots")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="tech_choice_plots")
 
     relevant_scenarios = set(df['Scenario'].unique())
     relevant_scenarios.update(set(df['Relative to'].unique()))
@@ -609,7 +612,7 @@ def load_tech_choice_graph_params():
 
 
 def load_different_xaxis_graph_params():
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="different_xaxis_plots")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="different_xaxis_plots")
 
     relevant_scenarios = set(df['Scenario'].unique())
     relevant_scenarios.update(set(df['Relative to'].unique()))
@@ -633,13 +636,13 @@ def load_color_maps():
     """ Function to load color maps from controller """
     color_maps = dict()
 
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="egen_resource_colors")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="egen_resource_colors")
     color_maps['egen_resources'] = dict(zip(df['Resource'], df['Color']))
 
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="sector_colors")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="sector_colors")
     color_maps['sectors'] = dict(zip(df['Sector'], df['Color']))
 
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsx', sheet_name="fuel_colors")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="fuel_colors")
     color_maps['fuels'] = dict(zip(df['Fuel'], df['Color']))
 
     return color_maps
