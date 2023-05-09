@@ -90,6 +90,68 @@ def base_scenario_comparison_graphs(df, color_maps, branch_maps):
     relevant_scenarios, scenario_comparison_params = load_sce_comps()
     df_scenario_comp = df[df['Scenario'].isin(relevant_scenarios)].copy()
 
+    # Emissions over time for entire economy
+    # TODO: add an input to this function to filter for fuels
+    graph_lines_comparing_scenarios_over_time(
+        df_in=df_scenario_comp,
+        result=EMISSIONS_RESULT_STRING,
+        multiplier=1e-6,
+        marginalize=False,
+        cumulative=False,
+        branch_map=branch_maps['all_branches_together'],
+        scenario_comparison_params=scenario_comparison_params,
+        make_graph_kwd='emissions_over_time',
+        title='Scenario Emissions',
+        xaxis_title='',
+        yaxis_title='Emissions (Mt CO2e)',
+        xcol='Year',
+        ycol='Value',
+        yaxis_to_zero=True,
+        fpath=FIGURES_PATH,
+        fname='new_emissions_over_time',
+    )
+
+    # Marginal emissions over time for entire economy
+    graph_lines_comparing_scenarios_over_time(
+        df_in=df_scenario_comp,
+        result=EMISSIONS_RESULT_STRING,
+        multiplier=1e-6,
+        marginalize=True,
+        cumulative=False,
+        branch_map=branch_maps['all_branches_together'],
+        scenario_comparison_params=scenario_comparison_params,
+        make_graph_kwd='marginal_emissions_over_time',
+        title='Scenario Marginal Emissions',
+        xaxis_title='',
+        yaxis_title='Marginal Emissions (Mt CO2e)',
+        xcol='Year',
+        ycol='Value',
+        yaxis_to_zero=True,
+        fpath=FIGURES_PATH,
+        fname='new_marginal_emissions_over_time',
+    )
+
+    # Marginal cost over time for entire economy
+    graph_lines_comparing_scenarios_over_time(
+        df_in=df_scenario_comp,
+        result=COST_RESULT_STRING,
+        multiplier=1e-9,
+        marginalize=True,
+        cumulative=False,
+        branch_map=branch_maps['all_branches_together'],
+        scenario_comparison_params=scenario_comparison_params,
+        make_graph_kwd='marginal_cost_over_time',
+        title='Scenario Marginal Costs',
+        xaxis_title='',
+        yaxis_title='$B',
+        xcol='Year',
+        ycol='Value',
+        yaxis_to_zero=True,
+        fpath=FIGURES_PATH,
+        fname='new_marginal_cost_over_time',
+    )
+
+
     graph_emissions_over_time_scenario_comparisons(
         df_in=df_scenario_comp,
         scenario_comparison_params=scenario_comparison_params,
@@ -291,11 +353,11 @@ def load_all_files(input_path, sheet="Results"):
     added_scenarios = set()
 
     # iterate through all files and combine the datasets from the excel documents
-    this_list = os.listdir(input_path)
-    this_list.sort(reverse = True)
+    file_list = os.listdir(input_path)
+    file_list.sort(reverse=True)
     i = 0
-    for fname in this_list:
-        print(fname)
+    for fname in file_list:
+        # print(fname)
         f = os.path.join(input_path, fname)
         if os.path.isfile(f) and (fname[0] not in [".", "~"]):
             df_excel = pd.read_excel(f, sheet_name=sheet)
@@ -472,10 +534,11 @@ def load_sce_comps():
 
     # Generate list of dictionaries storing parameters for each group of scenarios that will be graphed
     scenario_comp_params = []
-    for _, dfg in df.groupby('Group'):
+    for id, dfg in df.groupby('id'):
         params = dict()
 
         # scenarios included in the group
+        params['id'] = id
         params['scenarios'] = dfg['Scenario'].tolist()
         params['relevant_scenarios'] = list(set(dfg['Scenario'].tolist() + dfg['Relative to'].tolist()))
 
@@ -809,6 +872,61 @@ def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
     return df
 
 
+def graph_lines_comparing_scenarios_over_time(df_in, result, multiplier, marginalize, cumulative, branch_map,
+                                              scenario_comparison_params, make_graph_kwd, title, xaxis_title,
+                                              yaxis_title, xcol, ycol, yaxis_to_zero, fpath, fname):
+    """
+    Function to make graph comparing results from multiple scenarios. Each scenario gets one line.
+    :param df_in: dataframe of results (after they've been cleaned by reformat() function
+    :param result: String or List of strings of relevant results (eg Energy Demand Final Units)
+    :param multiplier: Float - Value to multiply the result by in order to change units
+    :param marginalize: Bool - whether or not to marginalize results
+    :param cumulative: Bool - whether or not results should be displayed as cumulative sum
+    :param branch_map: dict - mapping subgroup --> list of branches
+    :param scenario_comparison_params: list of param_dicts for graphing
+    :param make_graph_kwd: key in param_dict whose value controls whether or not the graph should be made
+    :param title:
+    :param xaxis_title:
+    :param yaxis_title:
+    :param xcol: Column in dataframe that controls what goes on the xaxis (usually 'Year')
+    :param ycol: Column in dataframe that controls what goes on the xaxis (usually 'Value')
+    :param yaxis_to_zero: Bool controlling whether y-axis should extend to 0
+    :param fpath: file path
+    :param fname: file name
+    :return: N/A -- saves graph locally
+    """
+    for param_dict in scenario_comparison_params:
+        if param_dict[make_graph_kwd]:
+
+            df_graph = df_in[df_in['Scenario'].isin(param_dict['relevant_scenarios'])].copy()
+            df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
+
+            # TODO: add in fuel filter
+
+            df_graph['Value'] = df_graph['Value'] * multiplier
+
+            if marginalize:
+                df_graph = marginalize_it(df_graph, param_dict['relative_to_map'])
+
+            if cumulative:
+                df_graph = cumsum_it(df_graph)
+
+            fig = plot_line_scenario_comparison_over_time(
+                df=df_graph,
+                title=title,
+                yaxis_title=yaxis_title,
+                xaxis_title=xaxis_title,
+                params=param_dict,
+                xcol=xcol,
+                ycol=ycol,
+            )
+
+            if yaxis_to_zero:
+                fig.update_yaxes(rangemode="tozero")
+
+            fig.write_image(fpath / f"{fname}_{param_dict['id']}.pdf")
+
+
 def graph_emissions_over_time_scenario_comparisons(df_in, scenario_comparison_params, branch_map):
 
     df = calculate_annual_result_by_subgroup(df_in, EMISSIONS_RESULT_STRING, branch_map)
@@ -821,7 +939,7 @@ def graph_emissions_over_time_scenario_comparisons(df_in, scenario_comparison_pa
                 title='Scenario Emissions',
                 yaxis_title='Annual Emissions (Mt CO2e)',
                 xaxis_title='',
-                sce_comp=params,
+                params=params,
             )
             fig.update_yaxes(rangemode="tozero")
             fig.write_image(FIGURES_PATH / f"emissions_over_time{i}.pdf")
@@ -840,7 +958,7 @@ def graph_marginal_emissions_over_time_scenario_comparisons(df_in, scenario_comp
                 title='',
                 yaxis_title='Change in Annual Emissions (Mt CO2e)',
                 xaxis_title='',
-                sce_comp=params,
+                params=params,
             )
             fig.write_image(FIGURES_PATH / f"marginal_emissions_over_time_{i}.pdf")
 
@@ -861,7 +979,7 @@ def graph_marginal_cost_over_time_scenario_comparisons(df_in, scenario_compariso
                 title='Scenario Marginal Costs',
                 yaxis_title='$/yr (Billion)',
                 xaxis_title='',
-                sce_comp=params,
+                params=params,
             )
             fig.write_image(FIGURES_PATH / f"marginal_cost_over_time_{i}.pdf")
 
@@ -1606,20 +1724,20 @@ def plot_scatter_scenario_comparison(df, title, xaxis_title, yaxis_title, sce_co
     return fig
 
 
-def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, sce_comp):
+def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, params, xcol='Year', ycol='Value'):
     fig = go.Figure()
 
-    for sce in sce_comp['scenarios']:
+    for sce in params['scenarios']:
         df_sce = df[df['Scenario'] == sce].copy()
         fig.add_trace(go.Scatter(
             mode='lines',
-            x=df_sce['Year'],
-            y=df_sce['Value'],
-            name=sce_comp['name_map'][sce],
-            showlegend=sce_comp['legend_map'][sce],
+            x=df_sce[xcol],
+            y=df_sce[ycol],
+            name=params['name_map'][sce],
+            showlegend=params['legend_map'][sce],
             line=dict(
-                color=sce_comp['color_map'][sce],
-                dash=sce_comp['line_map'][sce],
+                color=params['color_map'][sce],
+                dash=params['line_map'][sce],
             ),
 
         ))
