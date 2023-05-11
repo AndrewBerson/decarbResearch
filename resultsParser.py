@@ -55,6 +55,8 @@ def main():
     color_maps = load_color_maps()        # keys are egen_resources, sectors, fuels
     branch_maps = form_branch_maps(df)    # keys are the column names in the controller
 
+    relevant_scenarios, sce_graph_params = form_sce_graph_params()
+
     # make graphs of comparisons between scenarios over time
     base_scenario_comparisons(df, color_maps, branch_maps)
 
@@ -113,7 +115,6 @@ def base_scenario_comparisons(df, color_maps, branch_maps):
         fpath=FIGURES_PATH,
         fname='rngimports',
     )
-
 
     # Emissions over time for entire economy
     graph_lines_comparing_scenarios_over_time(
@@ -534,11 +535,11 @@ def form_branch_maps(df_results):
 
     # form maps of branches
     branch_maps = dict()
-    maps = df.columns.tolist()
-    maps.remove('Branch')
+    map_names = df.columns.tolist()
+    map_names.remove('Branch')
 
     # iterate through columns in the controller
-    for map_name in maps:
+    for map_name in map_names:
         branch_maps[map_name] = dict()
 
         df_map = df[['Branch'] + [map_name]].copy()
@@ -631,6 +632,28 @@ def load_sce_comps_over_time():
         scenario_comp_params.append(params)
 
     return list(relevant_scenarios), scenario_comp_params
+
+
+def form_sce_graph_params():
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="scenario_graph_params")
+
+    relevant_scenarios = set(df['scenario'].unique())
+    relevant_scenarios.update(set(df['relative_to'].unique()))
+
+    map_val_cols = [col for col in df.columns.tolist() if col not in ['group_id', 'scenario']]
+    map_val_cols_by_name = [col for col in df.columns.tolist() if col not in ['group_id', 'scenario', 'name']]
+
+    sce_graph_params = dict()
+    for group_id, dfg in df.groupby(by=['group_id']):
+        sce_graph_params[group_id] = dict()
+
+        for col in map_val_cols:
+            sce_graph_params[group_id][col + '_map'] = dict(zip(dfg['scenario'], dfg[col]))
+
+        for col in map_val_cols_by_name:
+            sce_graph_params[group_id][col + '_map_by_name'] = dict(zip(dfg['name'], dfg[col]))
+
+    return relevant_scenarios, sce_graph_params
 
 
 def load_individual_scenarios():
