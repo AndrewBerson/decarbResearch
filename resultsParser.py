@@ -68,7 +68,7 @@ def main():
     # load_shape_graphs(df_loads, color_maps)
 
     # Sensitivity graphs
-    sensitivity_graphs(df, color_maps, branch_maps)
+    # sensitivity_graphs(df, color_maps, branch_maps)
 
     # Plots where the x-axis values are set in the controller
     # diff_xaxis_graphs(df, color_maps, branch_maps)
@@ -144,6 +144,7 @@ def base_scenario_comparisons(df, color_maps, branch_maps):
         marginalize=False,
         cumulative=False,
         branch_map=branch_maps['all_branches_together'],
+        fuel_filter=None,
         scenario_comparison_params=scenario_comparison_params,
         make_graph_kwd='emissions_over_time',
         title='Scenario Emissions',
@@ -164,6 +165,7 @@ def base_scenario_comparisons(df, color_maps, branch_maps):
         marginalize=True,
         cumulative=False,
         branch_map=branch_maps['all_branches_together'],
+        fuel_filter=None,
         scenario_comparison_params=scenario_comparison_params,
         make_graph_kwd='marginal_emissions_over_time',
         title='Scenario Marginal Emissions',
@@ -184,6 +186,7 @@ def base_scenario_comparisons(df, color_maps, branch_maps):
         marginalize=True,
         cumulative=False,
         branch_map=branch_maps['all_branches_together'],
+        fuel_filter=None,
         scenario_comparison_params=scenario_comparison_params,
         make_graph_kwd='marginal_cost_over_time',
         title='Scenario Marginal Costs',
@@ -194,6 +197,29 @@ def base_scenario_comparisons(df, color_maps, branch_maps):
         yaxis_to_zero=True,
         fpath=FIGURES_PATH,
         fname='new_marginal_cost_over_time',
+    )
+
+    # cost of abatement
+    graph_bars_comparing_scenarios_in_specified_yrs(
+        df_in=df_scenario_comp,
+        result='cost of abatement',
+        multiplier=1,
+        marginalize=False,
+        cumulative=False,
+        branch_map=branch_maps['all_branches_together'],
+        fuel_filter=None,
+        scenario_comparison_params=scenario_comparison_params,
+        make_graph_kwd='cost_of_co2_abatement',
+        title='cost of abatement',
+        xaxis_title='',
+        yaxis_title='$/t',
+        xcol='Naming',
+        ycol='Value',
+        color_col='Naming',
+        yaxis_to_zero=True,
+        fpath=FIGURES_PATH,
+        fname='new_cost_abatement',
+        include_legend=True,
     )
 
     graph_marginal_emissions_vs_marginal_cost_scatter_scenario_comparison(
@@ -577,6 +603,7 @@ def load_sce_comps_over_time():
         params['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
         params['legend_map'] = dict(zip(dfg['Scenario'], dfg['Include in legend']))
         params['marker_map'] = dict(zip(dfg['Scenario'], dfg['Marker']))
+        params['year_map'] = dict(zip(dfg['Scenario'], dfg['Specified Year']))
 
         # dictionaries mapping name --> color, line, etc.
         params['line_map_by_name'] = dict(zip(dfg['Naming'], dfg['Line']))
@@ -894,6 +921,7 @@ def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
     df['annualized_cost'] = df['cumulative_marginal_cost'] * CAPITAL_RECOVERY_FACTOR
     df['annualized_emissions_reduction'] = -1 * df['cumulative_marginal_emissions'] / TOTAL_YEARS
     df['cost_of_abatement'] = df['annualized_cost'] / df['annualized_emissions_reduction']
+    df['Value'] = df['cost_of_abatement']
 
     return df
 
@@ -969,6 +997,104 @@ def graph_lines_comparing_scenarios_over_time(df_in, result, multiplier, margina
                 fig.update_yaxes(rangemode="tozero")
 
             fig.write_image(fpath / f"{fname}_{param_dict['id']}.pdf")
+
+
+def graph_bars_comparing_scenarios_in_specified_yrs(df_in, result, multiplier, marginalize, cumulative, branch_map,
+                                                    fuel_filter, scenario_comparison_params, make_graph_kwd, title,
+                                                    xaxis_title, yaxis_title, xcol, ycol, color_col, yaxis_to_zero,
+                                                    fpath, fname, include_legend, legend_position='below',
+                                                    plot_width=800, plot_height=500):
+
+    for param_dict in scenario_comparison_params:
+        if param_dict[make_graph_kwd]:
+
+            # filter out irrelevant scenarios
+            df_graph = df_in[df_in['Scenario'].isin(param_dict['relevant_scenarios'])].copy()
+
+            # Calculate result
+            if result == 'cost of abatement':
+                df_graph = evaluate_dollar_per_ton_abated(
+                    df_in=df_graph[df_graph['Scenario'].isin(param_dict['relevant_scenarios'])],
+                    subgroup_dict=branch_map,
+                    relative_to_map=param_dict['relative_to_map']
+                )
+            else:
+                df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
+
+                # if specified, filter for specific fuels
+                if fuel_filter is not None:
+                    df_graph = df_graph[df_graph['Fuel'].isin(fuel_filter)].copy()
+
+                # combine fuels
+                df_graph = df_graph.replace({"Fuel": FUELS_TO_COMBINE})
+                df_graph = df_graph.groupby(by=['Year', 'Scenario', 'Subgroup', 'Fuel'], as_index=False).sum()
+
+                if marginalize:
+                    df_graph = marginalize_it(df_graph, param_dict['relative_to_map'])
+
+                if cumulative:
+                    df_graph = cumsum_it(df_graph)
+
+                # get rid of years not specified to be included
+                for sce, yr in param_dict['year_map'].items():
+                    rows_to_drop = np.array(
+                        (df_graph['Scenario'] == sce) &
+                        (df_graph['Year'] != yr)
+                    )
+                    row_ids_to_drop = list(np.where(rows_to_drop)[0])
+                    df_graph = df_graph.drop(index=row_ids_to_drop)
+
+            df_graph['Value'] = df_graph['Value'] * multiplier
+
+            df_graph['Naming'] = df_graph['Scenario'].map(param_dict['name_map'])
+
+            fig = plot_bar_scenario_comparison(
+                df=df_graph,
+                title=title,
+                xaxis_title=xaxis_title,
+                yaxis_title=yaxis_title,
+                color_dict=param_dict['color_map_by_name'],
+                color_column=color_col,
+                include_legend=include_legend,
+                legend_position=legend_position,
+                xcol=xcol,
+                ycol=ycol,
+            )
+            fig.write_image(fpath / f"{fname}_{param_dict['id']}.pdf")
+
+
+def plot_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict, color_column='Subgroup',
+                                 include_legend=False, legend_position='below', xcol='Value', ycol='Scenario'):
+    """
+
+    :param df:
+    :param title:
+    :param xaxis_title:
+    :param yaxis_title:
+    :param color_dict:
+    :param color_column:
+    :param include_legend:
+    :param xcol:
+    :param ycol:
+    :return:
+    """
+
+    fig = px.bar(
+        df,
+        x=xcol,
+        y=ycol,
+        color=color_column,
+        color_discrete_map=color_dict,
+    )
+
+    if not include_legend:
+        fig.update_layout(showlegend=False)
+    elif legend_position == 'below':
+        fig = update_legend_layout(fig, xaxis_title)
+
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_plot_size(fig)
+    return fig
 
 
 def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, params, xcol='Year', ycol='Value',
@@ -1665,37 +1791,6 @@ def plot_area_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map,
     fig = update_plot_size(fig)
     return fig
 
-
-def plot_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict, color_column='Subgroup',
-                                 include_legend=False, xcol='Value', ycol='Scenario'):
-    """
-
-    :param df:
-    :param title:
-    :param xaxis_title:
-    :param yaxis_title:
-    :param color_dict:
-    :param color_column:
-    :param include_legend:
-    :param xcol:
-    :param ycol:
-    :return:
-    """
-
-    fig = px.bar(
-        df,
-        x=xcol,
-        y=ycol,
-        color=color_column,
-        color_discrete_map=color_dict,
-    )
-    if include_legend:
-        fig = update_legend_layout(fig, xaxis_title)
-    else:
-        fig.update_layout(showlegend=False)
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = update_plot_size(fig)
-    return fig
 
 
 def plot_grouped_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict, grouping_column,
