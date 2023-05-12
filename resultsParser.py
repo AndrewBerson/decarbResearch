@@ -11,7 +11,7 @@ from tqdm import tqdm
 INPUT_PATH = Path("resultsFiles/may7_2023")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
-FIGURES_PATH = INPUT_PATH / "figures"
+FIGURES_PATH = INPUT_PATH / "new_figures"
 
 # Years, discount rate, capital recovery factor
 BASE_YEAR = 2018
@@ -56,7 +56,12 @@ def main():
     branch_maps = form_branch_maps(df)    # keys are the column names in the controller
 
     relevant_scenarios, sce_graph_params = form_sce_graph_params()
-    line_over_time_graphs(df, color_maps, branch_maps, sce_graph_params)
+    # call_line_over_time_graphs_from_controller(df, color_maps, branch_maps, sce_graph_params)
+
+    # call_bar_graphs_over_time_from_controller(df, color_maps, branch_maps, sce_graph_params)
+
+    call_bar_graphs_over_scenarios_from_controller(df, color_maps, branch_maps, sce_graph_params)
+
 
 
     # make graphs of comparisons between scenarios over time
@@ -78,8 +83,8 @@ def main():
     # diff_xaxis_graphs(df, color_maps, branch_maps)
 
 
-def line_over_time_graphs(df, color_maps, branch_maps, sce_graph_params):
-    df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="line_over_time_graphs")
+def call_line_over_time_graphs_from_controller(df, color_maps, branch_maps, sce_graph_params):
+    df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="lines_over_time")
     df_graphs = df_graphs.fillna('')
 
     for _, row in df_graphs.iterrows():
@@ -87,12 +92,12 @@ def line_over_time_graphs(df, color_maps, branch_maps, sce_graph_params):
         if row['fuel_filter'] == '':
             fuel_filter = None
         else:
-            fuel_filter = row['fuel_filter'].replace(' ', '').split(',')
+            fuel_filter = [fuel.strip() for fuel in row['fuel_filter'].split(',')]
 
-        graph_lines_comparing_scenarios_over_time(
+        lines_over_time(
             df_in=df,
             param_dict=sce_graph_params[row['group_id']],
-            result=row['result'],
+            result=[result.strip() for result in row['result'].split(',')],
             multiplier=row['multiplier'],
             marginalize=row['marginalize'],
             cumulative=row['cumulative'],
@@ -113,10 +118,88 @@ def line_over_time_graphs(df, color_maps, branch_maps, sce_graph_params):
         )
 
 
-def graph_lines_comparing_scenarios_over_time(df_in, param_dict, result, multiplier, marginalize, cumulative,
-                                              branch_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
-                                              ycol, yaxis_to_zero, fpath, fname, group_id,
-                                              legend_position='below', plot_width=800, plot_height=500):
+def call_bar_graphs_over_time_from_controller(df, color_maps, branch_maps, sce_graph_params):
+    df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="bars_over_time")
+    df_graphs = df_graphs.fillna('')
+
+    for _, row in df_graphs.iterrows():
+
+        if row['fuel_filter'] == '':
+            fuel_filter = None
+        else:
+            fuel_filter = [fuel.strip() for fuel in row['fuel_filter'].split(',')]
+
+        bars_over_time(
+            df_in=df,
+            param_dict=sce_graph_params[row['group_id']],
+            result=[result.strip() for result in row['result'].split(',')],
+            multiplier=row['multiplier'],
+            marginalize=row['marginalize'],
+            cumulative=row['cumulative'],
+            branch_map=branch_maps[row['branch_map_name']],
+            color_map=color_maps[row['color_map_name']],
+            fuel_filter=fuel_filter,
+            title=row['title'],
+            xaxis_title=row['xaxis_title'],
+            yaxis_title=row['yaxis_title'],
+            xcol=row['xcol'],
+            ycol=row['ycol'],
+            stacked=row['stacked'],
+            grouped=row['grouped'],
+            color_col=row['color_col'],
+            yaxis_to_zero=row['yaxis_to_zero'],
+            fpath=FIGURES_PATH,
+            fname=row['fname'],
+            group_id=row['group_id'],
+            legend_position='below',
+            plot_width=800,
+            plot_height=500
+        )
+
+
+def call_bar_graphs_over_scenarios_from_controller(df, color_maps, branch_maps, sce_graph_params):
+    df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="bars_over_scenarios")
+    df_graphs = df_graphs.fillna('')
+
+    for _, row in df_graphs.iterrows():
+
+        if row['fuel_filter'] == '':
+            fuel_filter = None
+        else:
+            fuel_filter = [fuel.strip() for fuel in row['fuel_filter'].split(',')]
+
+        bars_over_scenarios(
+            df_in=df,
+            param_dict=sce_graph_params[row['group_id']],
+            result=[result.strip() for result in row['result'].split(',')],
+            multiplier=row['multiplier'],
+            marginalize=row['marginalize'],
+            cumulative=row['cumulative'],
+            branch_map=branch_maps[row['branch_map_name']],
+            color_map=color_maps[row['color_map_name']],
+            fuel_filter=fuel_filter,
+            title=row['title'],
+            xaxis_title=row['xaxis_title'],
+            yaxis_title=row['yaxis_title'],
+            xcol=row['xcol'],
+            ycol=row['ycol'],
+            stacked=row['stacked'],
+            grouped=row['grouped'],
+            color_col=row['color_col'],
+            yaxis_to_zero=row['yaxis_to_zero'],
+            fpath=FIGURES_PATH,
+            fname=row['fname'],
+            group_id=row['group_id'],
+            legend_position='below',
+            plot_width=800,
+            plot_height=500
+        )
+
+
+def lines_over_time(df_in, param_dict, result, multiplier, marginalize, cumulative,
+                    branch_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
+                    ycol, yaxis_to_zero, fpath, fname, group_id,
+                    legend_position='below', plot_width=800, plot_height=500):
     """
     Function to make graph comparing results from multiple scenarios. Each scenario gets one line.
     :param df_in: dataframe of results (after they've been cleaned by reformat() function
@@ -147,6 +230,7 @@ def graph_lines_comparing_scenarios_over_time(df_in, param_dict, result, multipl
 
     # Calculate result
     df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
+    df_graph['Value'] = df_graph['Value'] * multiplier
 
     # if specified, filter for specific fuels
     if fuel_filter is not None:
@@ -162,9 +246,7 @@ def graph_lines_comparing_scenarios_over_time(df_in, param_dict, result, multipl
     df_graph = df_graph.replace({"Fuel": FUELS_TO_COMBINE})
 
     # sum across fuels and subgroups contained within the same year and scenario
-    df_graph = df_graph.groupby(by=['Year', 'Scenario'], as_index=False).sum()
-
-    df_graph['Value'] = df_graph['Value'] * multiplier
+    df_graph = df_graph.groupby(by=['Scenario'] + [xcol], as_index=False).sum()
 
     fig = plot_line_scenario_comparison_over_time(
         df=df_graph,
@@ -184,6 +266,242 @@ def graph_lines_comparing_scenarios_over_time(df_in, param_dict, result, multipl
 
     fig.write_image(fpath / f"{fname}_{group_id}.pdf")
 
+
+def bars_over_time(df_in, param_dict, result, multiplier, marginalize, cumulative,
+                   branch_map, color_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
+                   ycol, stacked, grouped, color_col, yaxis_to_zero, fpath, fname, group_id,
+                   legend_position='below', plot_width=800, plot_height=500):
+    """
+    Function to make graph comparing results from multiple scenarios. Each scenario gets one line.
+    :param df_in: dataframe of results (after they've been cleaned by reformat() function
+    :param param_dict: dictionary of parameters for the graph
+    :param result: String or List of strings of relevant results (eg Energy Demand Final Units)
+    :param multiplier: Float - Value to multiply the result by in order to change units
+    :param marginalize: Bool - whether or not to marginalize results
+    :param cumulative: Bool - whether or not results should be displayed as cumulative sum
+    :param branch_map: dict - mapping subgroup --> list of branches
+                        (Note: for this function, there should only be one key in this dictionary)
+    :param fuel_filter: list of fuels to filter for (if None, then it will not apply a filter)
+    :param title:
+    :param xaxis_title:
+    :param yaxis_title:
+    :param xcol: Column in dataframe that controls what goes on the xaxis (usually 'Year')
+    :param ycol: Column in dataframe that controls what goes on the xaxis (usually 'Value')
+    :param yaxis_to_zero: Bool controlling whether y-axis should extend to 0
+    :param fpath: file path
+    :param fname: file name
+    :param legend_position: string -- if == 'below' then the legend will be at bottom of graph
+    :param plot_width: int
+    :param plot_height: int
+    :return: N/A -- saves graph locally
+    """
+
+    # filter out irrelevant scenarios
+    df_graph = df_in[df_in['Scenario'].isin(param_dict['relevant_scenarios'])].copy()
+
+    # Calculate result
+    df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
+    df_graph['Value'] = df_graph['Value'] * multiplier
+
+    # if specified, filter for specific fuels
+    if fuel_filter is not None:
+        df_graph = df_graph[df_graph['Fuel'].isin(fuel_filter)].copy()
+
+    if marginalize:
+        df_graph = marginalize_it(df_graph, param_dict['relative_to_map'])
+
+    if cumulative:
+        df_graph = cumsum_it(df_graph)
+
+    # combine fuels
+    df_graph = df_graph.replace({"Fuel": FUELS_TO_COMBINE})
+
+    df_graph = df_graph[df_graph['Scenario'].isin(param_dict['scenarios'])].copy()
+    df_graph['name'] = df_graph['Scenario'].map(param_dict['name_map'])
+    df_graph['associated_branch_map_key'] = df_graph['Scenario'].map(param_dict['associated_branch_map_key_map'])
+
+    # sum across fuels and subgroups contained within the same year and scenario
+    df_graph = df_graph.groupby(by=['Year', 'name'] + [color_col], as_index=False).sum()
+
+    if not grouped:
+        fig = px.bar(
+            df_graph,
+            x=xcol,
+            y=ycol,
+            color=color_col,
+            color_discrete_map=color_map,
+        )
+    else:
+        fig = px.bar(
+            df_graph,
+            x=xcol,
+            y=ycol,
+            color=color_col,
+            barmode='group',
+            color_discrete_map=color_map,
+        )
+
+    if yaxis_to_zero:
+        fig.update_yaxes(rangemode="tozero")
+
+    fig.write_image(fpath / f"{fname}_{group_id}.pdf")
+
+
+def bars_over_scenarios(df_in, param_dict, result, multiplier, marginalize, cumulative,
+                        branch_map, color_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
+                        ycol, stacked, grouped, color_col, yaxis_to_zero, fpath, fname, group_id,
+                        legend_position='below', plot_width=800, plot_height=500):
+
+    # filter out irrelevant scenarios
+    df_graph = df_in[df_in['Scenario'].isin(param_dict['relevant_scenarios'])].copy()
+
+    # Calculate result (special function for cost of abatement)
+    if result == ['cost of abatement']:
+        df_graph = evaluate_dollar_per_ton_abated(
+            df_in=df_graph[df_graph['Scenario'].isin(param_dict['relevant_scenarios'])],
+            subgroup_dict=branch_map,
+            relative_to_map=param_dict['relative_to_map']
+        )
+    else:
+        df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
+        df_graph['Value'] = df_graph['Value'] * multiplier
+
+        # if specified, filter for specific fuels
+        if fuel_filter is not None:
+            df_graph = df_graph[df_graph['Fuel'].isin(fuel_filter)].copy()
+
+        if marginalize:
+            df_graph = marginalize_it(df_graph, param_dict['relative_to_map'])
+
+        if cumulative:
+            df_graph = cumsum_it(df_graph)
+
+        # combine fuels
+        df_graph = df_graph.replace({"Fuel": FUELS_TO_COMBINE})
+
+        # get rid of years not specified to be included
+        for sce, yr in param_dict['specified_year_map'].items():
+            df_graph = df_graph.reset_index(drop=True)
+            rows_to_drop = np.array(
+                (df_graph['Scenario'] == sce) &
+                (df_graph['Year'] != yr)
+            )
+            row_ids_to_drop = list(np.where(rows_to_drop)[0])
+            df_graph = df_graph.drop(index=row_ids_to_drop)
+
+    df_graph = df_graph[df_graph['Scenario'].isin(param_dict['scenarios'])].copy()
+    df_graph['name'] = df_graph['Scenario'].map(param_dict['name_map'])
+    df_graph['associated_branch_map_key'] = df_graph['Scenario'].map(param_dict['associated_branch_map_key_map'])
+
+    # sum values within the same year, scenario, specified color
+    df_graph = df_graph.groupby(by=list(set(['Year'] + [xcol, ycol, color_col]) - set(['Value'])), as_index=False).sum()
+
+    if not grouped:
+        fig = px.bar(
+            df_graph,
+            x=xcol,
+            y=ycol,
+            color=color_col,
+            color_discrete_map=color_map,
+        )
+    else:
+        fig = px.bar(
+            df_graph,
+            x=xcol,
+            y=ycol,
+            color=color_col,
+            barmode='group',
+            color_discrete_map=color_map,
+        )
+
+    if yaxis_to_zero:
+        fig.update_yaxes(rangemode="tozero")
+
+    fig.write_image(fpath / f"{fname}_{group_id}.pdf")
+
+
+def bar_graphs(df_in, param_dict, result, multiplier, marginalize, cumulative,
+                branch_map, fuel_filter, title, xaxis_title, yaxis_title, xcol, color_col, include_legend,
+                ycol, yaxis_to_zero, fpath, fname, group_id,
+                legend_position='below', plot_width=800, plot_height=500):
+    """
+    Function to make graph comparing results from multiple scenarios. Each scenario gets one line.
+    :param df_in: dataframe of results (after they've been cleaned by reformat() function
+    :param param_dict: dictionary of parameters for the graph
+    :param result: String or List of strings of relevant results (eg Energy Demand Final Units)
+    :param multiplier: Float - Value to multiply the result by in order to change units
+    :param marginalize: Bool - whether or not to marginalize results
+    :param cumulative: Bool - whether or not results should be displayed as cumulative sum
+    :param branch_map: dict - mapping subgroup --> list of branches
+                        (Note: for this function, there should only be one key in this dictionary)
+    :param fuel_filter: list of fuels to filter for (if None, then it will not apply a filter)
+    :param title:
+    :param xaxis_title:
+    :param yaxis_title:
+    :param xcol: Column in dataframe that controls what goes on the xaxis (usually 'Year')
+    :param ycol: Column in dataframe that controls what goes on the xaxis (usually 'Value')
+    :param yaxis_to_zero: Bool controlling whether y-axis should extend to 0
+    :param fpath: file path
+    :param fname: file name
+    :param legend_position: string -- if == 'below' then the legend will be at bottom of graph
+    :param plot_width: int
+    :param plot_height: int
+    :return: N/A -- saves graph locally
+    """
+
+    # filter out irrelevant scenarios
+    df_graph = df_in[df_in['Scenario'].isin(param_dict['relevant_scenarios'])].copy()
+
+    # Calculate result
+    if result == 'cost of abatement':
+        df_graph = evaluate_dollar_per_ton_abated(
+            df_in=df_graph[df_graph['Scenario'].isin(param_dict['relevant_scenarios'])],
+            subgroup_dict=branch_map,
+            relative_to_map=param_dict['relative_to_map']
+        )
+    else:
+        df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
+
+        # if specified, filter for specific fuels
+        if fuel_filter is not None:
+            df_graph = df_graph[df_graph['Fuel'].isin(fuel_filter)].copy()
+
+        # combine fuels
+        df_graph = df_graph.replace({"Fuel": FUELS_TO_COMBINE})
+        df_graph = df_graph.groupby(by=['Year', 'Scenario', 'Subgroup', 'Fuel'], as_index=False).sum()
+
+        if marginalize:
+            df_graph = marginalize_it(df_graph, param_dict['relative_to_map'])
+
+        if cumulative:
+            df_graph = cumsum_it(df_graph)
+
+        # get rid of years not specified to be included
+        for sce, yr in param_dict['year_map'].items():
+            rows_to_drop = np.array(
+                (df_graph['Scenario'] == sce) &
+                (df_graph['Year'] != yr)
+            )
+            row_ids_to_drop = list(np.where(rows_to_drop)[0])
+            df_graph = df_graph.drop(index=row_ids_to_drop)
+
+    df_graph['Value'] = df_graph['Value'] * multiplier
+
+    df_graph['Naming'] = df_graph['Scenario'].map(param_dict['name_map'])
+
+    fig = plot_bar_scenario_comparison(
+        df=df_graph,
+        title=title,
+        xaxis_title=xaxis_title,
+        yaxis_title=yaxis_title,
+        color_dict=param_dict['color_map_by_name'],
+        color_column=color_col,
+        include_legend=include_legend,
+        legend_position=legend_position,
+        xcol=xcol,
+        ycol=ycol,
+    )
+    fig.write_image(fpath / f"{fname}_{param_dict['id']}.pdf")
 
 def diff_xaxis_graphs(df, color_maps, branch_maps):
     relevant_scenarios, params = load_different_xaxis_graph_params()
