@@ -54,27 +54,16 @@ def main():
     branch_maps = form_branch_maps(df)
 
     relevant_scenarios, sce_graph_params = form_sce_graph_params()
-    # call_line_over_time_graphs_from_controller(df, color_maps, branch_maps, sce_graph_params)
 
-    # call_bar_graphs_over_time_from_controller(df, color_maps, branch_maps, sce_graph_params)
-
-    # call_bar_graphs_over_scenarios_from_controller(df, color_maps, branch_maps, sce_graph_params)
-
-    # call_diff_xaxis_lines_from_controller(df, color_maps, branch_maps, sce_graph_params)
-
-    # call_diff_xaxis_bars_from_controller(df, color_maps, branch_maps, sce_graph_params)
-
+    call_line_over_time_graphs_from_controller(df, color_maps, branch_maps, sce_graph_params)
+    call_bar_graphs_over_time_from_controller(df, color_maps, branch_maps, sce_graph_params)
+    call_bar_graphs_over_scenarios_from_controller(df, color_maps, branch_maps, sce_graph_params)
+    call_diff_xaxis_lines_from_controller(df, color_maps, branch_maps, sce_graph_params)
+    call_diff_xaxis_bars_from_controller(df, color_maps, branch_maps, sce_graph_params)
     call_x_y_scatter_from_controller(df, color_maps, branch_maps, sce_graph_params)
 
-
-    # make graphs of comparisons between scenarios over time
-    # base_scenario_comparisons(df, color_maps, branch_maps)
-
     # load shape graphs
-    # load_shape_graphs(df_loads, color_maps)
-
-    # Plots where the x-axis values are set in the controller
-    # diff_xaxis_graphs(df, color_maps, branch_maps)
+    load_shape_graphs(df_loads, color_maps)
 
 
 def call_line_over_time_graphs_from_controller(df, color_maps, branch_maps, sce_graph_params):
@@ -224,6 +213,7 @@ def call_diff_xaxis_lines_from_controller(df, color_maps, branch_maps, sce_graph
             ycol=row['ycol'],
             color_col=row['color_col'],
             yaxis_to_zero=row['yaxis_to_zero'],
+            include_markers=row['include_markers'],
             fpath=FIGURES_PATH,
             fname=row['fname'],
             group_id=row['group_id'],
@@ -593,7 +583,7 @@ def bars_over_scenarios(df_in, param_dict, result, multiplier, marginalize, cumu
 
 def diff_xaxis_line_graphs(df_in, param_dict, result, multiplier, marginalize, cumulative, discount,
                         branch_map, color_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
-                        ycol, color_col, yaxis_to_zero, fpath, fname, group_id,
+                        ycol, color_col, yaxis_to_zero, fpath, fname, group_id, include_markers,
                         legend_position='below', plot_width=800, plot_height=500):
     df_graph = form_df_graph(
         df_in=df_in,
@@ -615,6 +605,7 @@ def diff_xaxis_line_graphs(df_in, param_dict, result, multiplier, marginalize, c
         y=ycol,
         color=color_col,
         color_discrete_map=color_map,
+        markers=include_markers,
     )
 
     fig = update_titles(fig, title, xaxis_title, yaxis_title)
@@ -852,37 +843,6 @@ def form_sce_graph_params():
     return relevant_scenarios, sce_graph_params
 
 
-# TODO: delete this function when ready
-def load_individual_scenarios():
-    """ Function to load scenario comparisons as dictated in controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="individual_scenario_graphs")
-
-    relevant_scenarios = set(df['Scenario'].unique())
-    relevant_scenarios.update(set(df['Relative to'].unique()))
-
-    individual_graph_params = []
-    for key, dfg in df.groupby('id'):
-        params = {
-            'scenario': dfg['Scenario'].unique()[0],
-            'relevant_scenarios': [dfg['Scenario'].unique()[0], dfg['Relative to'].unique()[0]],
-            'id': dfg['id'].unique()[0],
-            'name': dfg['Naming'].unique()[0],
-            'relative_to_map': dict(zip(dfg['Scenario'], dfg['Relative to'])),
-
-            # which graphs to generate
-            'marginal_costs_by_sector': dfg['marginal costs by sector'].unique()[0],
-            'marginal_emissions_by_sector': dfg['marginal emissions by sector'].unique()[0],
-            'emissions_by_sector': dfg['emissions by sector'].unique()[0],
-            'egen_by_resource': dfg['egen by resource'].unique()[0],
-            'cumulative_egen_capacity_added': dfg['cumulative egen capacity added'].unique()[0],
-            'energy_demand_by_fuel': dfg['energy demand by fuel'].unique()[0],
-            'marginal_energy_demand_by_fuel': dfg['marginal energy demand by fuel'].unique()[0],
-        }
-        individual_graph_params.append(params)
-
-    return relevant_scenarios, individual_graph_params
-
-
 # TODO: rewrite this function so params are read in automatically
 def load_load_comps():
     """ Function to load scenario comparisons as dictated in controller """
@@ -1105,69 +1065,6 @@ def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
     return df
 
 
-def plot_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict, color_column='Subgroup',
-                                 include_legend=False, legend_position='below', xcol='Value', ycol='Scenario'):
-    """
-
-    :param df:
-    :param title:
-    :param xaxis_title:
-    :param yaxis_title:
-    :param color_dict:
-    :param color_column:
-    :param include_legend:
-    :param xcol:
-    :param ycol:
-    :return:
-    """
-
-    fig = px.bar(
-        df,
-        x=xcol,
-        y=ycol,
-        color=color_column,
-        color_discrete_map=color_dict,
-    )
-
-    if not include_legend:
-        fig.update_layout(showlegend=False)
-    elif legend_position == 'below':
-        fig = place_legend_below(fig, xaxis_title)
-
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = update_plot_size(fig)
-    return fig
-
-
-def plot_line_scenario_comparison_over_time(df, title, yaxis_title, xaxis_title, params, xcol='Year', ycol='Value',
-                                            legend_position='below', plot_width=800, plot_height=500):
-    fig = go.Figure()
-
-    for sce in params['scenarios']:
-        df_sce = df[df['Scenario'] == sce].copy()
-        fig.add_trace(go.Scatter(
-            mode='lines',
-            x=df_sce[xcol],
-            y=df_sce[ycol],
-            name=params['name_map'][sce],
-            showlegend=params['include_in_legend_map'][sce],
-            line=dict(
-                color=params['color_map'][sce],
-                dash=params['line_map'][sce],
-            ),
-
-        ))
-
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-
-    if legend_position == 'below':
-        fig = place_legend_below(fig, xaxis_title)
-
-    fig = update_plot_size(fig, plot_width, plot_height)
-
-    return fig
-
-
 def graph_load_by_sector(df_in, params, color_map):
     df = df_in.copy()
     df['Value'] = df['Value'] / 1e3
@@ -1284,42 +1181,6 @@ def sum_load_across_branches(df_in):
     return df
 
 
-def plot_bar_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map, yaxis_col='Value',
-                                xaxis_col='Year', color_col='Subgroup', include_sum=True):
-    fig = px.bar(
-        df,
-        x=xaxis_col,
-        y=yaxis_col,
-        color=color_col,
-        color_discrete_map=color_map,
-    )
-
-    # xaxis is a unit of time
-    # yaxis is a value (eg emissions)
-    if include_sum:
-        df_sum = pd.DataFrame(columns=[xaxis_col, yaxis_col])
-        for t in df[xaxis_col].unique():
-            sum_in_t = df[df[xaxis_col] == t][yaxis_col].sum()
-            df_sum.loc[len(df_sum.index)] = [t, sum_in_t]
-        # add line to graph showing sum
-        fig.add_trace(go.Scatter(
-            mode='lines',
-            x=df_sum[xaxis_col],
-            y=df_sum[yaxis_col],
-            name="Total",
-            showlegend=True,
-            line=dict(
-                color='black',
-                dash='solid',
-            )
-        ))
-
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = place_legend_below(fig, xaxis_title)
-    fig = update_plot_size(fig)
-    return fig
-
-
 def plot_area_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map, yaxis_col='Value',
                                  xaxis_col='Year', color_col='Subgroup', include_sum=True):
     fig = px.area(
@@ -1356,74 +1217,12 @@ def plot_area_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map,
     return fig
 
 
-def plot_grouped_bar_scenario_comparison(df, title, xaxis_title, yaxis_title, color_dict, grouping_column,
-                                         color_column, include_legend=False):
-    fig = px.bar(
-        df,
-        x=grouping_column,
-        y='Value',
-        color=color_column,
-        barmode='group',
-        color_discrete_map=color_dict,
-    )
-    if include_legend:
-        pass
-        # fig = place_legend_below(fig, xaxis_title)
-    else:
-        fig.update_layout(showlegend=False)
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = update_plot_size(fig)
-    return fig
-
-
-def plot_scatter_scenario_comparison(df, title, xaxis_title, yaxis_title, sce_comp):
-    fig = go.Figure()
-
-    for sce in sce_comp['scenarios']:
-        df_sce = df[df['Scenario'] == sce].copy()
-        fig.add_trace(go.Scatter(
-            mode='markers',
-            x=df_sce['xval'],
-            y=df_sce['yval'],
-            name=sce_comp['name_map'][sce],
-            showlegend=sce_comp['legend_map'][sce],
-            marker_symbol=sce_comp['marker_map'][sce],
-            marker_color=sce_comp['color_map'][sce],
-        ))
-
-    fig.update_traces(marker={'size': 10})
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = place_legend_below(fig, xaxis_title)
-    fig = update_plot_size(fig)
-    return fig
-
-
 def update_titles(fig, title, xaxis_title, yaxis_title):
     fig.update_layout(
         title=title,
         xaxis_title=xaxis_title,
         yaxis_title=yaxis_title,
     )
-    return fig
-
-
-def update_to_tall_fig(fig, include_legend=True):
-    fig.update_layout(
-        autosize=False,
-        height=1500,
-    )
-
-    if include_legend:
-        fig.update_layout(
-            legend=dict(
-                orientation='h',
-                yanchor='top',
-                y=-0.05,
-                xanchor='left',
-                x=0,
-            )
-        )
-    fig.update_yaxes(automargin=True)
     return fig
 
 
