@@ -4,8 +4,7 @@ from pathlib import Path
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import os
-from tqdm import tqdm
+
 
 # Paths
 INPUT_PATH = Path("resultsFiles/may7_2023")
@@ -36,9 +35,10 @@ FUELS_TO_COMBINE = {
     "Hydrogen Transmitted": "Hydrogen"
 }
 RESOURCE_PROXY = {
+    'name':     ['Today', 'Today', 'Resource Proxy', 'Resource Proxy'],
     'Scenario': ['Today', 'Today', 'Resource Proxy', 'Resource Proxy'],
-    'Fuel': ['RNG', 'Renewable Diesel', 'RNG', 'Renewable Diesel'],
-    'Value': [55, 95, 455, 285],
+    'Fuel':     ['RNG', 'Renewable Diesel', 'RNG', 'Renewable Diesel'],
+    'Value':    [55, 95, 455, 285],
 }
 
 
@@ -55,12 +55,17 @@ def main():
 
     relevant_scenarios, sce_graph_params = form_sce_graph_params()
     # call_line_over_time_graphs_from_controller(df, color_maps, branch_maps, sce_graph_params)
-    #
+
     # call_bar_graphs_over_time_from_controller(df, color_maps, branch_maps, sce_graph_params)
-    #
+
     # call_bar_graphs_over_scenarios_from_controller(df, color_maps, branch_maps, sce_graph_params)
 
-    call_diff_xaxis_lines_from_controller(df, color_maps, branch_maps, sce_graph_params)
+    # call_diff_xaxis_lines_from_controller(df, color_maps, branch_maps, sce_graph_params)
+
+    # call_diff_xaxis_bars_from_controller(df, color_maps, branch_maps, sce_graph_params)
+
+    call_x_y_scatter_from_controller(df, color_maps, branch_maps, sce_graph_params)
+
 
     # make graphs of comparisons between scenarios over time
     # base_scenario_comparisons(df, color_maps, branch_maps)
@@ -127,6 +132,7 @@ def call_bar_graphs_over_time_from_controller(df, color_maps, branch_maps, sce_g
             marginalize=row['marginalize'],
             cumulative=row['cumulative'],
             discount=row['discount'],
+            include_sum=row['include_sum'],
             branch_map=branch_maps[row['branch_map_name']],
             color_map=color_maps[row['color_map_name']],
             fuel_filter=fuel_filter,
@@ -142,9 +148,9 @@ def call_bar_graphs_over_time_from_controller(df, color_maps, branch_maps, sce_g
             fpath=FIGURES_PATH,
             fname=row['fname'],
             group_id=row['group_id'],
-            legend_position='below',
-            plot_width=800,
-            plot_height=500
+            legend_position=row['legend_position'],
+            plot_width=row['plot_width'],
+            plot_height=row['plot_height'],
         )
 
 
@@ -170,6 +176,7 @@ def call_bar_graphs_over_scenarios_from_controller(df, color_maps, branch_maps, 
             branch_map=branch_maps[row['branch_map_name']],
             color_map=color_maps[row['color_map_name']],
             fuel_filter=fuel_filter,
+            include_fuel_proxy=row['include_fuel_proxy'],
             title=row['title'],
             xaxis_title=row['xaxis_title'],
             yaxis_title=row['yaxis_title'],
@@ -182,9 +189,9 @@ def call_bar_graphs_over_scenarios_from_controller(df, color_maps, branch_maps, 
             fpath=FIGURES_PATH,
             fname=row['fname'],
             group_id=row['group_id'],
-            legend_position='below',
-            plot_width=800,
-            plot_height=500
+            legend_position=row['legend_position'],
+            plot_width=row['plot_width'],
+            plot_height=row['plot_height'],
         )
 
 
@@ -215,6 +222,44 @@ def call_diff_xaxis_lines_from_controller(df, color_maps, branch_maps, sce_graph
             yaxis_title=row['yaxis_title'],
             xcol=row['xcol'],
             ycol=row['ycol'],
+            color_col=row['color_col'],
+            yaxis_to_zero=row['yaxis_to_zero'],
+            fpath=FIGURES_PATH,
+            fname=row['fname'],
+            group_id=row['group_id'],
+            legend_position=row['legend_position'],
+            plot_width=row['plot_width'],
+            plot_height=row['plot_height'],
+        )
+
+
+def call_diff_xaxis_bars_from_controller(df, color_maps, branch_maps, sce_graph_params):
+    df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="diff_xaxis_bars")
+    df_graphs = df_graphs.fillna('')
+
+    for _, row in df_graphs.iterrows():
+
+        if row['fuel_filter'] == '':
+            fuel_filter = None
+        else:
+            fuel_filter = [fuel.strip() for fuel in row['fuel_filter'].split(',')]
+
+        diff_xaxis_bar_graphs(
+            df_in=df,
+            param_dict=sce_graph_params[row['group_id']],
+            result=[result.strip() for result in row['result'].split(',')],
+            multiplier=row['multiplier'],
+            marginalize=row['marginalize'],
+            cumulative=row['cumulative'],
+            discount=row['discount'],
+            branch_map=branch_maps[row['branch_map_name']],
+            color_map=color_maps[row['color_map_name']],
+            fuel_filter=fuel_filter,
+            title=row['title'],
+            xaxis_title=row['xaxis_title'],
+            yaxis_title=row['yaxis_title'],
+            xcol=row['xcol'],
+            ycol=row['ycol'],
             stacked=row['stacked'],
             grouped=row['grouped'],
             color_col=row['color_col'],
@@ -222,9 +267,48 @@ def call_diff_xaxis_lines_from_controller(df, color_maps, branch_maps, sce_graph
             fpath=FIGURES_PATH,
             fname=row['fname'],
             group_id=row['group_id'],
-            legend_position='below',
-            plot_width=800,
-            plot_height=500
+            legend_position=row['legend_position'],
+            plot_width=row['plot_width'],
+            plot_height=row['plot_height'],
+        )
+
+
+def call_x_y_scatter_from_controller(df, color_maps, branch_maps, sce_graph_params):
+    df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="x_y_scatter")
+    df_graphs = df_graphs.fillna('')
+
+    for _, row in df_graphs.iterrows():
+
+        if row['fuel_filter'] == '':
+            fuel_filter = None
+        else:
+            fuel_filter = [fuel.strip() for fuel in row['fuel_filter'].split(',')]
+
+        x_y_scatter_graphs(
+            df_in=df,
+            param_dict=sce_graph_params[row['group_id']],
+            result_x=[result.strip() for result in row['result_x'].split(',')],
+            multiplier_x=row['multiplier_x'],
+            marginalize_x=row['marginalize_x'],
+            cumulative_x=row['cumulative_x'],
+            discount_x=row['discount_x'],
+            result_y=[result.strip() for result in row['result_y'].split(',')],
+            multiplier_y=row['multiplier_y'],
+            marginalize_y=row['marginalize_y'],
+            cumulative_y=row['cumulative_y'],
+            discount_y=row['discount_y'],
+            branch_map=branch_maps[row['branch_map_name']],
+            fuel_filter=fuel_filter,
+            title=row['title'],
+            xaxis_title=row['xaxis_title'],
+            yaxis_title=row['yaxis_title'],
+            yaxis_to_zero=row['yaxis_to_zero'],
+            fpath=FIGURES_PATH,
+            fname=row['fname'],
+            group_id=row['group_id'],
+            legend_position=row['legend_position'],
+            plot_width=row['plot_width'],
+            plot_height=row['plot_height'],
         )
 
 
@@ -274,11 +358,10 @@ def form_df_graph(df_in, param_dict, result, multiplier, marginalize, cumulative
 
     df_graph = df_graph[df_graph['Scenario'].isin(param_dict['scenarios'])].copy()
 
+    # add columns based on the relevant maps (name_map, color_map...)
     for k, v in param_dict.items():
         if k[-4:] == '_map':
             df_graph[k[:-4]] = df_graph['Scenario'].map(v)
-    # df_graph['name'] = df_graph['Scenario'].map(param_dict['name_map'])
-    # df_graph['associated_branch_map_key'] = df_graph['Scenario'].map(param_dict['associated_branch_map_key_map'])
 
     # sum values within the same year, scenario, specified color
     df_graph = df_graph.groupby(by=groupby, as_index=False).sum()
@@ -359,7 +442,7 @@ def lines_over_time(df_in, param_dict, result, multiplier, marginalize, cumulati
     fig.write_image(fpath / f"{fname}_{group_id}.pdf")
 
 
-def bars_over_time(df_in, param_dict, result, multiplier, marginalize, cumulative, discount,
+def bars_over_time(df_in, param_dict, result, multiplier, marginalize, cumulative, discount, include_sum,
                    branch_map, color_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
                    ycol, stacked, grouped, color_col, yaxis_to_zero, fpath, fname, group_id,
                    legend_position='below', plot_width=800, plot_height=500):
@@ -420,6 +503,24 @@ def bars_over_time(df_in, param_dict, result, multiplier, marginalize, cumulativ
             color_discrete_map=color_map,
         )
 
+    if include_sum:
+        df_sum = pd.DataFrame(columns=[xcol, ycol])
+        for time_pt in df_graph[xcol].unique():
+            sum_in_t = df_graph[df_graph[xcol] == time_pt][ycol].sum()
+            df_sum.loc[len(df_sum.index)] = [time_pt, sum_in_t]
+        # add line to graph showing sum
+        fig.add_trace(go.Scatter(
+            mode='lines',
+            x=df_sum[xcol],
+            y=df_sum[ycol],
+            name="Total",
+            showlegend=True,
+            line=dict(
+                color='black',
+                dash='solid',
+            )
+        ))
+
     fig = update_titles(fig, title, xaxis_title, yaxis_title)
     fig = update_plot_size(fig, plot_width, plot_height)
 
@@ -437,7 +538,7 @@ def bars_over_time(df_in, param_dict, result, multiplier, marginalize, cumulativ
 
 def bars_over_scenarios(df_in, param_dict, result, multiplier, marginalize, cumulative, discount,
                         branch_map, color_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
-                        ycol, stacked, grouped, color_col, yaxis_to_zero, fpath, fname, group_id,
+                        ycol, stacked, grouped, color_col, yaxis_to_zero, fpath, fname, group_id, include_fuel_proxy,
                         legend_position='below', plot_width=800, plot_height=500):
 
     df_graph = form_df_graph(
@@ -451,8 +552,11 @@ def bars_over_scenarios(df_in, param_dict, result, multiplier, marginalize, cumu
         filter_yrs=True,
         branch_map=branch_map,
         fuel_filter=fuel_filter,
-        groupby=list({'Scenario', 'Year', xcol, ycol, color_col} - {'Value'})
+        groupby=list({'Scenario', xcol, ycol, color_col} - {'Value'})
     )
+
+    if include_fuel_proxy:
+        df_graph = pd.concat([df_graph, pd.DataFrame.from_dict(RESOURCE_PROXY)], axis=0, sort=True)
 
     if not grouped:
         fig = px.bar(
@@ -489,7 +593,7 @@ def bars_over_scenarios(df_in, param_dict, result, multiplier, marginalize, cumu
 
 def diff_xaxis_line_graphs(df_in, param_dict, result, multiplier, marginalize, cumulative, discount,
                         branch_map, color_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
-                        ycol, stacked, grouped, color_col, yaxis_to_zero, fpath, fname, group_id,
+                        ycol, color_col, yaxis_to_zero, fpath, fname, group_id,
                         legend_position='below', plot_width=800, plot_height=500):
     df_graph = form_df_graph(
         df_in=df_in,
@@ -502,14 +606,15 @@ def diff_xaxis_line_graphs(df_in, param_dict, result, multiplier, marginalize, c
         filter_yrs=True,
         branch_map=branch_map,
         fuel_filter=fuel_filter,
-        groupby=list({'Scenario', 'Year', xcol, ycol, color_col} - {'Value'})
+        groupby=list({'Scenario', xcol, ycol, color_col} - {'Value'})
     )
 
     fig = px.line(
         df_graph,
         x=xcol,
         y=ycol,
-        color=color_col
+        color=color_col,
+        color_discrete_map=color_map,
     )
 
     fig = update_titles(fig, title, xaxis_title, yaxis_title)
@@ -527,8 +632,124 @@ def diff_xaxis_line_graphs(df_in, param_dict, result, multiplier, marginalize, c
     fig.write_image(fpath / f"{fname}_{group_id}.pdf")
 
 
+def diff_xaxis_bar_graphs(df_in, param_dict, result, multiplier, marginalize, cumulative, discount,
+                        branch_map, color_map, fuel_filter, title, xaxis_title, yaxis_title, xcol,
+                        ycol, stacked, grouped, color_col, yaxis_to_zero, fpath, fname, group_id,
+                        legend_position='below', plot_width=800, plot_height=500):
+    df_graph = form_df_graph(
+        df_in=df_in,
+        param_dict=param_dict,
+        result=result,
+        multiplier=multiplier,
+        marginalize=marginalize,
+        cumulative=cumulative,
+        discount=discount,
+        filter_yrs=True,
+        branch_map=branch_map,
+        fuel_filter=fuel_filter,
+        groupby=list({'Scenario', xcol, ycol, color_col} - {'Value'})
+    )
 
-# TODO: different x axis graphs
+    if not grouped:
+        fig = px.bar(
+            df_graph,
+            x=xcol,
+            y=ycol,
+            color=color_col,
+            color_discrete_map=color_map,
+        )
+    else:
+        fig = px.bar(
+            df_graph,
+            x=xcol,
+            y=ycol,
+            color=color_col,
+            barmode='group',
+            color_discrete_map=color_map,
+        )
+
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_plot_size(fig, plot_width, plot_height)
+
+    fig.update_layout(legend_title='')
+    if legend_position == 'below':
+        fig = place_legend_below(fig, xaxis_title)
+    elif legend_position == 'hide':
+        fig.update_layout(showlegend=False)
+
+    if yaxis_to_zero:
+        fig.update_yaxes(rangemode="tozero")
+
+    fig.write_image(fpath / f"{fname}_{group_id}.pdf")
+
+
+def x_y_scatter_graphs(df_in, param_dict, result_x, multiplier_x, marginalize_x, cumulative_x, discount_x,
+                       result_y, multiplier_y, marginalize_y, cumulative_y, discount_y,
+                       branch_map, fuel_filter, title, xaxis_title, yaxis_title, yaxis_to_zero, fpath, fname, group_id,
+                       legend_position='below', plot_width=800, plot_height=500):
+    df_graph_x = form_df_graph(
+        df_in=df_in,
+        param_dict=param_dict,
+        result=result_x,
+        multiplier=multiplier_x,
+        marginalize=marginalize_x,
+        cumulative=cumulative_x,
+        discount=discount_x,
+        filter_yrs=True,
+        branch_map=branch_map,
+        fuel_filter=fuel_filter,
+        groupby=list({'Scenario'})
+    )
+    df_graph_x = df_graph_x.rename(columns={'Value': 'Value_x'})
+
+    df_graph_y = form_df_graph(
+        df_in=df_in,
+        param_dict=param_dict,
+        result=result_y,
+        multiplier=multiplier_y,
+        marginalize=marginalize_y,
+        cumulative=cumulative_y,
+        discount=discount_y,
+        filter_yrs=True,
+        branch_map=branch_map,
+        fuel_filter=fuel_filter,
+        groupby=list({'Scenario'})
+    )
+    df_graph_y = df_graph_y.rename(columns={'Value': 'Value_y'})
+    df_graph = df_graph_x.merge(df_graph_y, how='outer')
+    # df_graph = df_graph_x.copy()
+
+    fig = go.Figure()
+    for sce in param_dict['scenarios']:
+        df_sce = df_graph[df_graph['Scenario'] == sce].copy()
+        fig.add_trace(go.Scatter(
+            mode='markers',
+            x=df_sce['Value_x'],
+            y=df_sce['Value_y'],
+            name=param_dict['name_map'][sce],
+            showlegend=param_dict['include_in_legend_map'][sce],
+            marker_symbol=param_dict['marker_map'][sce],
+            marker_color=param_dict['color_map'][sce],
+        ))
+
+    fig.update_traces(marker={'size': 10})
+
+    fig = update_titles(fig, title, xaxis_title, yaxis_title)
+    fig = update_plot_size(fig, plot_width, plot_height)
+
+    fig.update_layout(legend_title='')
+    if legend_position == 'below':
+        fig = place_legend_below(fig, xaxis_title)
+    elif legend_position == 'hide':
+        fig.update_layout(showlegend=False)
+
+    if yaxis_to_zero:
+        fig.update_yaxes(rangemode="tozero")
+
+    fig.write_image(fpath / f"{fname}_{group_id}.pdf")
+
+
+# TODO: delete this when ready
 def diff_xaxis_graphs(df, color_maps, branch_maps):
     relevant_scenarios, params = load_different_xaxis_graph_params()
 
