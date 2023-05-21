@@ -5,7 +5,6 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
-
 # Paths
 INPUT_PATH = Path("resultsFiles/may7_2023")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
@@ -53,7 +52,7 @@ def main():
     color_map = load_color_map()
     branch_maps = form_branch_maps(df)
 
-    relevant_scenarios, sce_graph_params = form_sce_graph_params()
+    _, sce_graph_params = form_sce_graph_params()
 
     #
     result_graphs(
@@ -531,7 +530,7 @@ def macc(df_in, color_map, branch_maps, scenario_params, graph_params):
         filter_yrs=True,
         branch_map=branch_maps[graph_params['branch_map_name']],
         fuel_filter=fuel_filter,
-        groupby=['Scenario']
+        groupby=['Scenario', graph_params['color_col']]
     )
     df_graph_x = df_graph_x.rename(columns={'Value': 'Value_x'})
 
@@ -546,18 +545,52 @@ def macc(df_in, color_map, branch_maps, scenario_params, graph_params):
         filter_yrs=True,
         branch_map=branch_maps[graph_params['branch_map_name']],
         fuel_filter=fuel_filter,
-        groupby=['Scenario']
+        groupby=['Scenario', graph_params['color_col']]
     )
     df_graph_y = df_graph_y.rename(columns={'Value': 'Value_y'})
     df_graph = df_graph_x.merge(df_graph_y, how='outer')
 
-    df_graph = df_graph.sort_values(by='Value_y', axis=0)
-    df_graph['Value_x'] = df_graph['Value_x'].cumsum()
+    df_graph = df_graph.sort_values(by='Value_y', axis=0, ignore_index=True)
+    df_graph['end_range_x'] = df_graph['Value_x'].cumsum()
 
-    fig = px.bar(
-        df_graph,
-        x='Value_x',
-        y='Value_y',
+    df_graph['start_range_x'] = 0
+    for i in range(1, len(df_graph)):
+        df_graph.loc[i, 'start_range_x'] = df_graph.loc[i-1, 'end_range_x']
+
+    df_graph['width'] = df_graph['end_range_x'] - df_graph['start_range_x']
+    df_graph['mid_x'] = (df_graph['end_range_x'] + df_graph['start_range_x']) / 2.0
+
+    # fig = go.Figure(data=[go.Bar(
+    #     x=df_graph['mid_x'],
+    #     width=df_graph['width'],
+    #     y=df_graph['Value_y'],
+    #     # name=[scenario_params['name_map'][sce] for sce in df_graph['Scenario'].to_list()],
+    #     marker={
+    #         'color': [color_map[key] for key in df_graph[graph_params['color_col']].to_list()]
+    #     }
+    # )])
+
+    fig = go.Figure()
+    for sce in scenario_params['scenarios']:
+        df_sce = df_graph[df_graph['Scenario'] == sce].copy()
+        fig.add_trace(go.Bar(
+            x=df_sce['mid_x'],
+            width=df_sce['width'],
+            y=df_sce['Value_y'],
+            text=scenario_params['name_map'][sce],
+            showlegend=False,
+            marker=dict(
+                color=color_map[df_sce[graph_params['color_col']].unique()[0]],
+            ),
+        ))
+
+    fig.update_layout(
+        xaxis=dict(
+            tickmode='array',
+            tickvals=df_graph['mid_x'],
+            ticktext=[scenario_params['name_map'][sce] for sce in df_graph['Scenario'].to_list()],
+            showgrid=True,
+        )
     )
 
     fig = update_fig_styling(fig, graph_params)
