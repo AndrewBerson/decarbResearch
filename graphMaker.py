@@ -37,7 +37,7 @@ RESOURCE_PROXY = {
     'name':     ['Today', 'Today', 'Resource Proxy', 'Resource Proxy'],
     'Scenario': ['Today', 'Today', 'Resource Proxy', 'Resource Proxy'],
     'Fuel':     ['RNG', 'Renewable Diesel', 'RNG', 'Renewable Diesel'],
-    'Value':    [55, 95, 455, 285],
+    'Value':    [55*1e6, 95*1e6, 455*1e6, 285*1e6],
 }
 
 
@@ -52,18 +52,19 @@ def main():
     color_map = load_color_map()
     branch_maps = form_branch_maps(df)
 
-    _, sce_graph_params = form_sce_graph_params()
+    # read in scenario group parameters
+    _, all_sce_group_params = form_sce_group_params()
 
-    #
+    # create result graphs
     result_graphs(
-        df, color_map, branch_maps, sce_graph_params,
+        df, color_map, branch_maps, all_sce_group_params,
         (
-            (lines_over_time, 'lines_over_time'),
-            (bars_over_time, 'bars_over_time'),
-            (bars_over_scenarios, 'bars_over_scenarios'),
-            (diff_xaxis_lines, 'diff_xaxis_lines'),
-            (diff_xaxis_bars, 'diff_xaxis_bars'),
-            (x_y_scatter, 'x_y_scatter'),
+            # (lines_over_time, 'lines_over_time'),
+            # (bars_over_time, 'bars_over_time'),
+            # (bars_over_scenarios, 'bars_over_scenarios'),
+            # (diff_xaxis_lines, 'diff_xaxis_lines'),
+            # (diff_xaxis_bars, 'diff_xaxis_bars'),
+            # (x_y_scatter, 'x_y_scatter'),
             (tornado, 'tornado'),
             (macc, 'macc'),
         )
@@ -73,7 +74,7 @@ def main():
     load_shape_graphs(df_loads, color_map)
 
 
-def result_graphs(df, color_map, branch_maps, sce_graph_params, fns_sheets):
+def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets):
     for fn, sheet in fns_sheets:
         df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
         df_graphs = df_graphs.fillna('')
@@ -83,22 +84,22 @@ def result_graphs(df, color_map, branch_maps, sce_graph_params, fns_sheets):
                 df_in=df,
                 color_map=color_map,
                 branch_maps=branch_maps,
-                scenario_params=sce_graph_params[row['group_id']],
+                sce_group_params=all_sce_group_params[row['group_id']],
                 graph_params=row.to_dict(),
             )
 
 
-def form_df_graph(df_in, param_dict, result, multiplier, marginalize, cumulative, discount, filter_yrs,
+def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumulative, discount, filter_yrs,
                   branch_map, fuel_filter, groupby):
     # filter out irrelevant scenarios
-    df_graph = df_in[df_in['Scenario'].isin(param_dict['relevant_scenarios'])].copy()
+    df_graph = df_in[df_in['Scenario'].isin(sce_group_params['relevant_scenarios'])].copy()
 
     # Calculate result (special function for cost of abatement)
     if result == ['cost of abatement']:
         df_graph = evaluate_dollar_per_ton_abated(
-            df_in=df_graph[df_graph['Scenario'].isin(param_dict['relevant_scenarios'])],
+            df_in=df_graph[df_graph['Scenario'].isin(sce_group_params['relevant_scenarios'])],
             subgroup_dict=branch_map,
-            relative_to_map=param_dict['relative_to_map'],
+            relative_to_map=sce_group_params['relative_to_map'],
         )
         df_graph['Value'] = df_graph['Value'] * multiplier
     else:
@@ -113,7 +114,7 @@ def form_df_graph(df_in, param_dict, result, multiplier, marginalize, cumulative
             df_graph = discount_it(df_graph)
 
         if marginalize:
-            df_graph = marginalize_it(df_graph, param_dict['relative_to_map'])
+            df_graph = marginalize_it(df_graph, sce_group_params['relative_to_map'])
 
         if cumulative:
             df_graph = cumsum_it(df_graph)
@@ -123,7 +124,7 @@ def form_df_graph(df_in, param_dict, result, multiplier, marginalize, cumulative
 
         # get rid of years not specified to be included
         if filter_yrs:
-            for sce, yr in param_dict['specified_year_map'].items():
+            for sce, yr in sce_group_params['specified_year_map'].items():
                 df_graph = df_graph.reset_index(drop=True)
                 rows_to_drop = np.array(
                     (df_graph['Scenario'] == sce) &
@@ -132,11 +133,12 @@ def form_df_graph(df_in, param_dict, result, multiplier, marginalize, cumulative
                 row_ids_to_drop = list(np.where(rows_to_drop)[0])
                 df_graph = df_graph.drop(index=row_ids_to_drop)
 
-    df_graph = df_graph[df_graph['Scenario'].isin(param_dict['scenarios'])].copy()
+    # get rid of unneeded scenarios
+    df_graph = df_graph[df_graph['Scenario'].isin(sce_group_params['scenarios'])].copy()
 
     # add columns based on the relevant maps (name_map, color_map...)
-    for k, v in param_dict.items():
-        if k[-4:] == '_map':
+    for k, v in sce_group_params.items():
+        if k.endswith('_map'):
             df_graph[k[:-4]] = df_graph['Scenario'].map(v)
 
     # sum values within the same year, scenario, specified color
@@ -145,31 +147,7 @@ def form_df_graph(df_in, param_dict, result, multiplier, marginalize, cumulative
     return df_graph
 
 
-def lines_over_time(df_in, color_map, branch_maps, scenario_params, graph_params):
-    """
-    Function to make graph comparing results from multiple scenarios. Each scenario gets one line.
-    :param df_in: dataframe of results (after they've been cleaned by reformat() function
-    :param param_dict: dictionary of parameters for the graph
-    :param result: String or List of strings of relevant results (eg Energy Demand Final Units)
-    :param multiplier: Float - Value to multiply the result by in order to change units
-    :param marginalize: Bool - whether or not to marginalize results
-    :param cumulative: Bool - whether or not results should be displayed as cumulative sum
-    :param branch_map: dict - mapping subgroup --> list of branches
-                        (Note: for this function, there should only be one key in this dictionary)
-    :param fuel_filter: list of fuels to filter for (if None, then it will not apply a filter)
-    :param title:
-    :param xaxis_title:
-    :param yaxis_title:
-    :param xcol: Column in dataframe that controls what goes on the xaxis (usually 'Year')
-    :param ycol: Column in dataframe that controls what goes on the xaxis (usually 'Value')
-    :param yaxis_to_zero: Bool controlling whether y-axis should extend to 0
-    :param fpath: file path
-    :param fname: file name
-    :param legend_position: string -- if == 'below' then the legend will be at bottom of graph
-    :param plot_width: int
-    :param plot_height: int
-    :return: N/A -- saves graph locally
-    """
+def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -178,7 +156,7 @@ def lines_over_time(df_in, color_map, branch_maps, scenario_params, graph_params
 
     df_graph = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result'].split(',')],
         multiplier=graph_params['multiplier'],
         marginalize=graph_params['marginalize'],
@@ -191,18 +169,17 @@ def lines_over_time(df_in, color_map, branch_maps, scenario_params, graph_params
     )
 
     fig = go.Figure()
-    for sce in scenario_params['scenarios']:
+    for sce in sce_group_params['scenarios']:
         df_sce = df_graph[df_graph['Scenario'] == sce].copy()
         fig.add_trace(go.Scatter(
             mode='lines',
             x=df_sce[graph_params['xcol']],
             y=df_sce[graph_params['ycol']],
-            name=scenario_params['name_map'][sce],
-            showlegend=scenario_params['include_in_legend_map'][sce],
+            name=sce_group_params['name_map'][sce],
+            showlegend=sce_group_params['include_in_legend_map'][sce],
             line=dict(
-                # color=color_map[scenario_params['associated_color_map_key_map'][sce]],
-                color=scenario_params['color_map'][sce],
-                dash=scenario_params['line_map'][sce],
+                color=color_map[sce_group_params[graph_params['color_col'] + '_map'][sce]],
+                dash=sce_group_params['line_map'][sce],
             ),
         ))
 
@@ -210,7 +187,7 @@ def lines_over_time(df_in, color_map, branch_maps, scenario_params, graph_params
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
-def bars_over_time(df_in, color_map, branch_maps, scenario_params, graph_params):
+def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -219,7 +196,7 @@ def bars_over_time(df_in, color_map, branch_maps, scenario_params, graph_params)
 
     df_graph = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result'].split(',')],
         multiplier=graph_params['multiplier'],
         marginalize=graph_params['marginalize'],
@@ -273,7 +250,7 @@ def bars_over_time(df_in, color_map, branch_maps, scenario_params, graph_params)
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
-def bars_over_scenarios(df_in, color_map, branch_maps, scenario_params, graph_params):
+def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -282,7 +259,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, scenario_params, graph_pa
 
     df_graph = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result'].split(',')],
         multiplier=graph_params['multiplier'],
         marginalize=graph_params['marginalize'],
@@ -296,9 +273,12 @@ def bars_over_scenarios(df_in, color_map, branch_maps, scenario_params, graph_pa
         )
     )
 
-    # TODO: mutliply resource proxy by multiplier
     if graph_params['include_fuel_proxy']:
         df_graph = pd.concat([df_graph, pd.DataFrame.from_dict(RESOURCE_PROXY)], axis=0, sort=True)
+        df_graph.loc[
+            df_graph['Scenario'].isin(RESOURCE_PROXY['Scenario']),
+            'Value'
+        ] *= graph_params['multiplier']
 
     if not graph_params['grouped']:
         fig = px.bar(
@@ -322,7 +302,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, scenario_params, graph_pa
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
-def diff_xaxis_lines(df_in, color_map, branch_maps, scenario_params, graph_params):
+def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -331,7 +311,7 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, scenario_params, graph_param
 
     df_graph = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result'].split(',')],
         multiplier=graph_params['multiplier'],
         marginalize=graph_params['marginalize'],
@@ -358,7 +338,7 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, scenario_params, graph_param
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
-def diff_xaxis_bars(df_in, color_map, branch_maps, scenario_params, graph_params):
+def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -367,7 +347,7 @@ def diff_xaxis_bars(df_in, color_map, branch_maps, scenario_params, graph_params
 
     df_graph = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result'].split(',')],
         multiplier=graph_params['multiplier'],
         marginalize=graph_params['marginalize'],
@@ -403,7 +383,7 @@ def diff_xaxis_bars(df_in, color_map, branch_maps, scenario_params, graph_params
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
-def x_y_scatter(df_in, color_map, branch_maps, scenario_params, graph_params):
+def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -412,7 +392,7 @@ def x_y_scatter(df_in, color_map, branch_maps, scenario_params, graph_params):
 
     df_graph_x = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result_x'].split(',')],
         multiplier=graph_params['multiplier_x'],
         marginalize=graph_params['marginalize_x'],
@@ -427,7 +407,7 @@ def x_y_scatter(df_in, color_map, branch_maps, scenario_params, graph_params):
 
     df_graph_y = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result_y'].split(',')],
         multiplier=graph_params['multiplier_y'],
         marginalize=graph_params['marginalize_y'],
@@ -442,16 +422,16 @@ def x_y_scatter(df_in, color_map, branch_maps, scenario_params, graph_params):
     df_graph = df_graph_x.merge(df_graph_y, how='outer')
 
     fig = go.Figure()
-    for sce in scenario_params['scenarios']:
+    for sce in sce_group_params['scenarios']:
         df_sce = df_graph[df_graph['Scenario'] == sce].copy()
         fig.add_trace(go.Scatter(
             mode='markers',
             x=df_sce['Value_x'],
             y=df_sce['Value_y'],
-            name=scenario_params['name_map'][sce],
-            showlegend=scenario_params['include_in_legend_map'][sce],
-            marker_symbol=scenario_params['marker_map'][sce],
-            marker_color=scenario_params['color_map'][sce],
+            name=sce_group_params['name_map'][sce],
+            showlegend=sce_group_params['include_in_legend_map'][sce],
+            marker_symbol=sce_group_params['marker_map'][sce],
+            marker_color=color_map[sce_group_params['color_id_map'][sce]],
         ))
 
     fig.update_traces(marker={'size': 10})
@@ -460,7 +440,7 @@ def x_y_scatter(df_in, color_map, branch_maps, scenario_params, graph_params):
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
-def tornado(df_in, color_map, branch_maps, scenario_params, graph_params):
+def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -469,7 +449,7 @@ def tornado(df_in, color_map, branch_maps, scenario_params, graph_params):
 
     df = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result'].split(',')],
         multiplier=graph_params['multiplier'],
         marginalize=graph_params['marginalize'],
@@ -479,31 +459,31 @@ def tornado(df_in, color_map, branch_maps, scenario_params, graph_params):
         branch_map=branch_maps[graph_params['branch_map_name']],
         fuel_filter=fuel_filter,
         groupby=list(
-            {'Scenario', 'tornado_group', graph_params['color_col']} - {'Value'}
+            {'Scenario', 'tornado_group_name', 'tornado_order_id', graph_params['color_col']} - {'Value'}
         )
     )
 
-    df_graph = pd.DataFrame(columns=['tornado_group', 'base', 'height', graph_params['color_col']])
-    for key, dfg in df.groupby(by=['tornado_group']):
+    df_graph = pd.DataFrame(columns=['tornado_group_name', 'tornado_order_id', 'bar_min',
+                                     'bar_height', 'bar_max', graph_params['color_col']])
+    for key, dfg in df.groupby(by=['tornado_group_name']):
         df_graph.loc[len(df_graph.index)] = [
-            key,
-            dfg['Value'].min(),
-            dfg['Value'].max() - dfg['Value'].min(),
-            dfg[graph_params['color_col']].unique()[0]
+            key,                                            # tornado_group_name
+            dfg['tornado_order_id'].unique()[0],            # tornado_order_id
+            dfg['Value'].min(),                             # bar_min
+            dfg['Value'].max() - dfg['Value'].min(),        # bar_height
+            dfg['Value'].max(),                             # bar_max
+            dfg[graph_params['color_col']].unique()[0]      # color_id
         ]
 
-    if graph_params['orientation'] == 'vertical':
-        x = 'height'
-        y = 'tornado_group'
-    else:
-        y = 'height'
-        x = 'tornado_group'
+    if graph_params['sort_by'] != '':
+        sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
+        df_graph = df_graph.sort_values(by=sort_by, ascending=graph_params['sort_ascending'], ignore_index=True)
 
     fig = px.bar(
         df_graph,
-        x=x,
-        y=y,
-        base='base',
+        x=graph_params['xcol'],
+        y=graph_params['ycol'],
+        base='bar_min',
         color=graph_params['color_col'],
         color_discrete_map=color_map,
     )
@@ -512,7 +492,7 @@ def tornado(df_in, color_map, branch_maps, scenario_params, graph_params):
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
-def macc(df_in, color_map, branch_maps, scenario_params, graph_params):
+def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -521,7 +501,7 @@ def macc(df_in, color_map, branch_maps, scenario_params, graph_params):
 
     df_graph_x = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result_x'].split(',')],
         multiplier=graph_params['multiplier_x'],
         marginalize=graph_params['marginalize_x'],
@@ -536,7 +516,7 @@ def macc(df_in, color_map, branch_maps, scenario_params, graph_params):
 
     df_graph_y = form_df_graph(
         df_in=df_in,
-        param_dict=scenario_params,
+        sce_group_params=sce_group_params,
         result=[result.strip() for result in graph_params['result_y'].split(',')],
         multiplier=graph_params['multiplier_y'],
         marginalize=graph_params['marginalize_y'],
@@ -560,37 +540,32 @@ def macc(df_in, color_map, branch_maps, scenario_params, graph_params):
     df_graph['width'] = df_graph['end_range_x'] - df_graph['start_range_x']
     df_graph['mid_x'] = (df_graph['end_range_x'] + df_graph['start_range_x']) / 2.0
 
-    # fig = go.Figure(data=[go.Bar(
-    #     x=df_graph['mid_x'],
-    #     width=df_graph['width'],
-    #     y=df_graph['Value_y'],
-    #     # name=[scenario_params['name_map'][sce] for sce in df_graph['Scenario'].to_list()],
-    #     marker={
-    #         'color': [color_map[key] for key in df_graph[graph_params['color_col']].to_list()]
-    #     }
-    # )])
-
     fig = go.Figure()
-    for sce in scenario_params['scenarios']:
+    for sce in sce_group_params['scenarios']:
         df_sce = df_graph[df_graph['Scenario'] == sce].copy()
         fig.add_trace(go.Bar(
             x=df_sce['mid_x'],
             width=df_sce['width'],
             y=df_sce['Value_y'],
-            text=scenario_params['name_map'][sce],
+            text=sce_group_params['name_map'][sce],
             showlegend=False,
             marker=dict(
                 color=color_map[df_sce[graph_params['color_col']].unique()[0]],
             ),
         ))
 
-    fig.update_layout(
-        xaxis=dict(
-            tickmode='array',
-            tickvals=df_graph['mid_x'],
-            ticktext=[scenario_params['name_map'][sce] for sce in df_graph['Scenario'].to_list()],
-            showgrid=True,
-        )
+    fig.update_xaxes(
+        showgrid=True,
+        ticks="outside",
+        tickson="boundaries",
+        ticklen=10
+    )
+
+    fig.update_yaxes(
+        showgrid=True,
+        ticks="outside",
+        tickson="boundaries",
+        ticklen=10
     )
 
     fig = update_fig_styling(fig, graph_params)
@@ -612,11 +587,18 @@ def update_fig_styling(fig, graph_params):
     elif graph_params['legend_position'] == 'hide':
         fig.update_layout(showlegend=False)
 
-    # set y axis to zero
+    # axis settings
     if graph_params['yaxis_to_zero']:
         fig.update_yaxes(rangemode="tozero")
 
-    # TODO: xaxis to zero, xaxis lims, yaxis lims
+    if graph_params['xaxis_to_zero']:
+        fig.update_xaxes(rangemode="tozero")
+
+    if graph_params['xaxis_lim'] != '':
+        fig.update_xaxes(range=[float(val) for val in graph_params['xaxis_lim'].split(',')])
+
+    if graph_params['yaxis_lim'] != '':
+        fig.update_yaxes(range=[float(val) for val in graph_params['yaxis_lim'].split(',')])
 
     return fig
 
@@ -698,8 +680,8 @@ def form_branch_maps(df_results):
     return branch_maps
 
 
-def form_sce_graph_params():
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="scenario_graph_params")
+def form_sce_group_params():
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="scenario_group_params")
 
     relevant_scenarios = set(df['scenario'].unique())
     relevant_scenarios.update(set(df['relative_to'].unique()))
@@ -707,21 +689,21 @@ def form_sce_graph_params():
     map_val_cols = [col for col in df.columns.tolist() if col not in ['group_id', 'scenario']]
     map_val_cols_by_name = [col for col in df.columns.tolist() if col not in ['group_id', 'scenario', 'name']]
 
-    sce_graph_params = dict()
+    sce_group_params = dict()
     for group_id, dfg in df.groupby(by=['group_id']):
-        sce_graph_params[group_id] = dict()
+        sce_group_params[group_id] = dict()
 
-        sce_graph_params[group_id]['scenarios'] = dfg['scenario'].tolist()
-        sce_graph_params[group_id]['relevant_scenarios'] = list(set(dfg['scenario'].tolist() +
+        sce_group_params[group_id]['scenarios'] = dfg['scenario'].tolist()
+        sce_group_params[group_id]['relevant_scenarios'] = list(set(dfg['scenario'].tolist() +
                                                                     dfg['relative_to'].tolist()))
 
         for col in map_val_cols:
-            sce_graph_params[group_id][col + '_map'] = dict(zip(dfg['scenario'], dfg[col]))
+            sce_group_params[group_id][col + '_map'] = dict(zip(dfg['scenario'], dfg[col]))
 
         for col in map_val_cols_by_name:
-            sce_graph_params[group_id][col + '_map_by_name'] = dict(zip(dfg['name'], dfg[col]))
+            sce_group_params[group_id][col + '_map_by_name'] = dict(zip(dfg['name'], dfg[col]))
 
-    return relevant_scenarios, sce_graph_params
+    return relevant_scenarios, sce_group_params
 
 
 # TODO: rewrite this function so params are read in automatically
@@ -1133,6 +1115,5 @@ def update_plot_size(fig, width=800, height=500):
 
 
 if __name__ == "__main__":
-    CLEAN_RESULTS_PATH.mkdir(parents=True, exist_ok=True)
     FIGURES_PATH.mkdir(parents=True, exist_ok=True)
     main()
