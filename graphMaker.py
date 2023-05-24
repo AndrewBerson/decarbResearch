@@ -455,7 +455,7 @@ def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
             name=sce_group_params['name_map'][sce],
             showlegend=sce_group_params['include_in_legend_map'][sce],
             marker_symbol=sce_group_params['marker_map'][sce],
-            marker_color=color_map[sce_group_params['color_id_map'][sce]],
+            marker_color=color_map[sce_group_params[graph_params['color_col']+'_map'][sce]],
         ))
 
     fig.update_traces(marker={'size': 10})
