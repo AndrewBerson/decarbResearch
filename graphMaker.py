@@ -59,12 +59,12 @@ def main():
     result_graphs(
         df, color_map, branch_maps, all_sce_group_params,
         (
-            # (lines_over_time, 'lines_over_time'),
-            # (bars_over_time, 'bars_over_time'),
-            # (bars_over_scenarios, 'bars_over_scenarios'),
-            # (diff_xaxis_lines, 'diff_xaxis_lines'),
-            # (diff_xaxis_bars, 'diff_xaxis_bars'),
-            # (x_y_scatter, 'x_y_scatter'),
+            (lines_over_time, 'lines_over_time'),
+            (bars_over_time, 'bars_over_time'),
+            (bars_over_scenarios, 'bars_over_scenarios'),
+            (diff_xaxis_lines, 'diff_xaxis_lines'),
+            (diff_xaxis_bars, 'diff_xaxis_bars'),
+            (x_y_scatter, 'x_y_scatter'),
             (tornado, 'tornado'),
             (macc, 'macc'),
         )
@@ -80,13 +80,14 @@ def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets):
         df_graphs = df_graphs.fillna('')
 
         for _, row in df_graphs.iterrows():
-            fn(
-                df_in=df,
-                color_map=color_map,
-                branch_maps=branch_maps,
-                sce_group_params=all_sce_group_params[row['group_id']],
-                graph_params=row.to_dict(),
-            )
+            if row['make_graph']:
+                fn(
+                    df_in=df,
+                    color_map=color_map,
+                    branch_maps=branch_maps,
+                    sce_group_params=all_sce_group_params[row['group_id']],
+                    graph_params=row.to_dict(),
+                )
 
 
 def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumulative, discount, filter_yrs,
@@ -257,6 +258,11 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
     else:
         fuel_filter = [fuel.strip() for fuel in graph_params['fuel_filter'].split(',')]
 
+    groupby = {'Scenario', graph_params['xcol'], graph_params['ycol'], graph_params['color_col']} - {'Value'}
+    if graph_params['sort_by'] != '':
+        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        groupby.update(set(sort_by))
+
     df_graph = form_df_graph(
         df_in=df_in,
         sce_group_params=sce_group_params,
@@ -268,11 +274,10 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
         filter_yrs=True,
         branch_map=branch_maps[graph_params['branch_map_name']],
         fuel_filter=fuel_filter,
-        groupby=list(
-            {'Scenario', graph_params['xcol'], graph_params['ycol'], graph_params['color_col']} - {'Value'}
-        )
+        groupby=list(groupby)
     )
 
+    # add in fuel proxy
     if graph_params['include_fuel_proxy']:
         df_graph = pd.concat([df_graph, pd.DataFrame.from_dict(RESOURCE_PROXY)], axis=0, sort=True)
         df_graph.loc[
@@ -280,11 +285,22 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             'Value'
         ] *= graph_params['multiplier']
 
+    # sort dataframe
+    if graph_params['sort_by'] != '':
+        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        df_graph = df_graph.sort_values(by=sort_by, ignore_index=True, ascending=graph_params['sort_ascending'])
+
+    # set up text annotations
+    text_auto = False
+    if graph_params['annotate']:
+        text_auto = graph_params['annotation_style']
+
     if not graph_params['grouped']:
         fig = px.bar(
             df_graph,
             x=graph_params['xcol'],
             y=graph_params['ycol'],
+            text_auto=text_auto,
             color=graph_params['color_col'],
             color_discrete_map=color_map,
         )
@@ -293,6 +309,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             df_graph,
             x=graph_params['xcol'],
             y=graph_params['ycol'],
+            text_auto=text_auto,
             color=graph_params['color_col'],
             barmode='group',
             color_discrete_map=color_map,
@@ -361,11 +378,17 @@ def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_param
         )
     )
 
+    # set up text annotations
+    text_auto = False
+    if graph_params['annotate']:
+        text_auto = graph_params['annotation_style']
+
     if not graph_params['grouped']:
         fig = px.bar(
             df_graph,
             x=graph_params['xcol'],
             y=graph_params['ycol'],
+            text_auto=text_auto,
             color=graph_params['color_col'],
             color_discrete_map=color_map,
         )
@@ -374,6 +397,7 @@ def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_param
             df_graph,
             x=graph_params['xcol'],
             y=graph_params['ycol'],
+            text_auto=text_auto,
             color=graph_params['color_col'],
             barmode='group',
             color_discrete_map=color_map,
@@ -488,6 +512,31 @@ def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
         color_discrete_map=color_map,
     )
 
+    # add text labels to both side of the tornado bar
+    if graph_params['annotate_tornado']:
+        if graph_params['xcol'] == 'tornado_group_name':
+            x_text = np.array(list(zip(df_graph['tornado_group_name'], df_graph['tornado_group_name']))).flatten()
+            y_text = np.array(list(zip(
+                df_graph['bar_min'] + df_graph['bar_height'] * .2,
+                df_graph['bar_max'] - df_graph['bar_height'] * .2
+            ))).flatten()
+            text = [f'{y:.1f}' for y in np.array(list(zip(df_graph['bar_min'], df_graph['bar_max']))).flatten()]
+        else:
+            y_text = np.array(list(zip(df_graph['tornado_group_name'], df_graph['tornado_group_name']))).flatten()
+            x_text = np.array(list(zip(
+                df_graph['bar_min'] + df_graph['bar_height'] * .2,
+                df_graph['bar_max'] - df_graph['bar_height'] * .2
+            ))).flatten()
+            text = [f'{x:.1f}' for x in np.array(list(zip(df_graph['bar_min'], df_graph['bar_max']))).flatten()]
+
+        fig.add_trace(go.Scatter(
+            x=x_text,
+            y=y_text,
+            text=text,
+            mode='text',
+            showlegend=False,
+        ))
+
     fig = update_fig_styling(fig, graph_params)
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
@@ -554,13 +603,13 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
             ),
         ))
 
+    # add in tick marks
     fig.update_xaxes(
         showgrid=True,
         ticks="outside",
         tickson="boundaries",
         ticklen=10
     )
-
     fig.update_yaxes(
         showgrid=True,
         ticks="outside",
@@ -599,6 +648,12 @@ def update_fig_styling(fig, graph_params):
 
     if graph_params['yaxis_lim'] != '':
         fig.update_yaxes(range=[float(val) for val in graph_params['yaxis_lim'].split(',')])
+
+    # update text annotations
+    if 'annotate' in graph_params:
+        if graph_params['annotate']:
+            fig.update_traces(textfont_size=14, textposition='inside', textangle=graph_params['annotation_angle'])
+            fig.update_layout(uniformtext_minsize=8, uniformtext_mode='hide')
 
     return fig
 
