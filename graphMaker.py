@@ -38,6 +38,7 @@ RESOURCE_PROXY = {
     'Scenario': ['Today', 'Today', 'Resource Proxy', 'Resource Proxy'],
     'Fuel':     ['RNG', 'Renewable Diesel', 'RNG', 'Renewable Diesel'],
     'Value':    [55*1e6, 95*1e6, 455*1e6, 285*1e6],
+    'sce_num':  [100, 100, -2, -2],
 }
 
 
