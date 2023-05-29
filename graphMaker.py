@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # Paths
-INPUT_PATH = Path("resultsFiles/may7_2023")
+INPUT_PATH = Path("resultsFiles/customRuns")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 FIGURES_PATH = INPUT_PATH / "new_figures"
@@ -186,7 +186,7 @@ def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_param
         ))
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.png", scale = 2)
 
 
 def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -342,7 +342,7 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
             {'Scenario', graph_params['xcol'], graph_params['ycol'], graph_params['color_col']} - {'Value'}
         )
     )
-
+    df_graph = df_graph.sort_values(by=["sce_num"], ascending = True) # Josh hard coded 05/28/23
     fig = px.line(
         df_graph,
         x=graph_params['xcol'],
@@ -653,7 +653,7 @@ def update_fig_styling(fig, graph_params):
     # update text annotations
     if 'annotate' in graph_params:
         if graph_params['annotate']:
-            fig.update_traces(textfont_size=14, textposition='inside', textangle=graph_params['annotation_angle'])
+            fig.update_traces(textfont_size=10, textposition='outside', textangle=graph_params['annotation_angle'])
             fig.update_layout(uniformtext_minsize=8, uniformtext_mode='hide')
 
     return fig
