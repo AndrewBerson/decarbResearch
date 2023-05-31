@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # Paths
-INPUT_PATH = Path("resultsFiles/customRuns")
+INPUT_PATH = Path("resultsFiles/combinedResults")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 FIGURES_PATH = INPUT_PATH / "new_figures"
@@ -144,7 +144,7 @@ def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumu
             df_graph[k[:-4]] = df_graph['Scenario'].map(v)
 
     # sum values within the same year, scenario, specified color
-    df_graph = df_graph.groupby(by=groupby, as_index=False).sum()
+    df_graph = df_graph.groupby(by=groupby, as_index=False)['Value'].sum()
 
     return df_graph
 
@@ -287,9 +287,15 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
         ] *= graph_params['multiplier']
 
     # sort dataframe
+    category_orders = dict()
     if graph_params['sort_by'] != '':
         sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
         df_graph = df_graph.sort_values(by=sort_by, ignore_index=True, ascending=graph_params['sort_ascending'])
+        if graph_params['xcol'] == 'Value':
+            category_orders = {graph_params['ycol']: df_graph[graph_params['ycol']].tolist()}
+        else:
+            category_orders = {graph_params['xcol']: df_graph[graph_params['xcol']].tolist()}
+
 
     # set up text annotations
     text_auto = False
@@ -304,6 +310,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             text_auto=text_auto,
             color=graph_params['color_col'],
             color_discrete_map=color_map,
+            category_orders=category_orders,
         )
     else:
         fig = px.bar(
@@ -314,6 +321,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             color=graph_params['color_col'],
             barmode='group',
             color_discrete_map=color_map,
+            category_orders=category_orders,
         )
 
     fig = update_fig_styling(fig, graph_params)
@@ -327,6 +335,11 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
     else:
         fuel_filter = [fuel.strip() for fuel in graph_params['fuel_filter'].split(',')]
 
+    groupby = {'Scenario', graph_params['xcol'], graph_params['ycol'], graph_params['color_col']} - {'Value'}
+    if graph_params['sort_by'] != '':
+        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        groupby.update(set(sort_by))
+
     df_graph = form_df_graph(
         df_in=df_in,
         sce_group_params=sce_group_params,
@@ -338,11 +351,13 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
         filter_yrs=True,
         branch_map=branch_maps[graph_params['branch_map_name']],
         fuel_filter=fuel_filter,
-        groupby=list(
-            {'Scenario', graph_params['xcol'], graph_params['ycol'], graph_params['color_col']} - {'Value'}
-        )
+        groupby=list(groupby)
     )
-    df_graph = df_graph.sort_values(by=["sce_num"], ascending = True) # Josh hard coded 05/28/23
+
+    if graph_params['sort_by'] != '':
+        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        df_graph = df_graph.sort_values(by=sort_by, ascending=graph_params['sort_ascending'], ignore_index=True)
+
     fig = px.line(
         df_graph,
         x=graph_params['xcol'],
@@ -500,9 +515,14 @@ def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
             dfg[graph_params['color_col']].unique()[0]      # color_id
         ]
 
+    category_orders = dict()
     if graph_params['sort_by'] != '':
-        sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
-        df_graph = df_graph.sort_values(by=sort_by, ascending=graph_params['sort_ascending'], ignore_index=True)
+        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        df_graph = df_graph.sort_values(by=sort_by, ignore_index=True, ascending=graph_params['sort_ascending'])
+        if graph_params['xcol'] == 'bar_height':
+            category_orders = {graph_params['ycol']: df_graph[graph_params['ycol']].tolist()}
+        else:
+            category_orders = {graph_params['xcol']: df_graph[graph_params['xcol']].tolist()}
 
     fig = px.bar(
         df_graph,
@@ -511,28 +531,29 @@ def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
         base='bar_min',
         color=graph_params['color_col'],
         color_discrete_map=color_map,
+        category_orders=category_orders,
     )
 
     # add text labels to both side of the tornado bar
     if graph_params['annotate_tornado']:
         if graph_params['xcol'] == 'tornado_group_name':
-            x_text = np.array(list(zip(df_graph['tornado_group_name'], df_graph['tornado_group_name']))).flatten()
-            y_text = np.array(list(zip(
+            x_text_pos = np.array(list(zip(df_graph['tornado_group_name'], df_graph['tornado_group_name']))).flatten()
+            y_text_pos = np.array(list(zip(
                 df_graph['bar_min'] + df_graph['bar_height'] * .2,
                 df_graph['bar_max'] - df_graph['bar_height'] * .2
             ))).flatten()
             text = [f'{y:.1f}' for y in np.array(list(zip(df_graph['bar_min'], df_graph['bar_max']))).flatten()]
         else:
-            y_text = np.array(list(zip(df_graph['tornado_group_name'], df_graph['tornado_group_name']))).flatten()
-            x_text = np.array(list(zip(
+            y_text_pos = np.array(list(zip(df_graph['tornado_group_name'], df_graph['tornado_group_name']))).flatten()
+            x_text_pos = np.array(list(zip(
                 df_graph['bar_min'] + df_graph['bar_height'] * .2,
                 df_graph['bar_max'] - df_graph['bar_height'] * .2
             ))).flatten()
             text = [f'{x:.1f}' for x in np.array(list(zip(df_graph['bar_min'], df_graph['bar_max']))).flatten()]
 
         fig.add_trace(go.Scatter(
-            x=x_text,
-            y=y_text,
+            x=x_text_pos,
+            y=y_text_pos,
             text=text,
             mode='text',
             showlegend=False,
@@ -618,6 +639,9 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
         ticklen=10
     )
 
+    fig.update_traces(textfont_size=10, textposition='inside')
+    fig.update_layout(uniformtext_minsize=6, uniformtext_mode='hide')
+
     fig = update_fig_styling(fig, graph_params)
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
@@ -665,6 +689,7 @@ def load_shape_graphs(df_loads, color_map):
     graph_load_comparison(
         df_in=df_load_comparison,
         comp_params=load_scenario_comparison_params,
+        color_map=color_map,
     )
 
     individual_load_scenarios, individual_load_params = load_individual_load_params()
@@ -1004,7 +1029,7 @@ def graph_load_by_sector(df_in, params, color_map):
         fig.write_image(FIGURES_PATH / f"load_shape_by_sector_{i}.pdf")
 
 
-def graph_load_comparison(df_in, comp_params):
+def graph_load_comparison(df_in, comp_params, color_map):
     df = sum_load_across_branches(df_in)
     df['Value'] = df['Value'] / 1e3
 
