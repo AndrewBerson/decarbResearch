@@ -57,22 +57,43 @@ def main():
     _, all_sce_group_params = form_sce_group_params()
 
     # create result graphs
-    result_graphs(
-        df, color_map, branch_maps, all_sce_group_params,
+    # result_graphs(
+    #     df, color_map, branch_maps, all_sce_group_params,
+    #     (
+    #         (lines_over_time, 'lines_over_time'),
+    #         (bars_over_time, 'bars_over_time'),
+    #         (bars_over_scenarios, 'bars_over_scenarios'),
+    #         (diff_xaxis_lines, 'diff_xaxis_lines'),
+    #         (diff_xaxis_bars, 'diff_xaxis_bars'),
+    #         (x_y_scatter, 'x_y_scatter'),
+    #         (tornado, 'tornado'),
+    #         (macc, 'macc'),
+    #     )
+    # )
+
+    load_graphs(
+        df_loads, color_map, all_sce_group_params,
         (
-            (lines_over_time, 'lines_over_time'),
-            (bars_over_time, 'bars_over_time'),
-            (bars_over_scenarios, 'bars_over_scenarios'),
-            (diff_xaxis_lines, 'diff_xaxis_lines'),
-            (diff_xaxis_bars, 'diff_xaxis_bars'),
-            (x_y_scatter, 'x_y_scatter'),
-            (tornado, 'tornado'),
-            (macc, 'macc'),
-        )
+            (load_shape_area, 'load_shape_area'),
+            (load_shape_disaggregated, 'load_shape_disaggregated'),
+            (multiple_load_shapes, 'multiple_load_shapes'),
+        ),
     )
 
-    # load shape graphs
-    load_shape_graphs(df_loads, color_map)
+
+def load_graphs(df, color_map, all_sce_group_params, fns_sheets):
+    for fn, sheet in fns_sheets:
+        df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
+        df_graphs = df_graphs.fillna('')
+
+        for _, row in df_graphs.iterrows():
+            if row['make_graph']:
+                fn(
+                    df_in=df,
+                    color_map=color_map,
+                    sce_group_params=all_sce_group_params[row['group_id']],
+                    graph_params=row.to_dict(),
+                )
 
 
 def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets):
@@ -683,22 +704,104 @@ def update_fig_styling(fig, graph_params):
     return fig
 
 
-def load_shape_graphs(df_loads, color_map):
-    load_scenarios_to_compare, load_scenario_comparison_params = load_load_comps()
-    df_load_comparison = df_loads[df_loads['Scenario'].isin(load_scenarios_to_compare)]
-    graph_load_comparison(
-        df_in=df_load_comparison,
-        comp_params=load_scenario_comparison_params,
-        color_map=color_map,
+def form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branches=False):
+    # filter for relevant scenarios
+    df_graph = df_in[df_in['Scenario'].isin(sce_group_params['scenarios'])].copy()
+
+    # filter for correct result
+    df_graph = df_graph[df_graph['Result Variable'] == graph_params['result']].copy()
+
+    # scale result
+    df_graph['Value'] = df_graph['Value'] * graph_params['multiplier']
+
+    # sum loads across branches
+    if sum_across_branches:
+        df_graph = sum_load_across_branches(df_graph)
+
+    # add columns based on the relevant maps (name_map, color_map...)
+    for k, v in sce_group_params.items():
+        if k.endswith('_map'):
+            df_graph[k[:-4]] = df_graph['Scenario'].map(v)
+
+    # get rid of years not specified to be included
+    for sce, yr in sce_group_params['load_shape_yr_map'].items():
+        df_graph = df_graph.reset_index(drop=True)
+        rows_to_drop = np.array(
+            (df_graph['Scenario'] == sce) &
+            (df_graph['Year'] != yr)
+        )
+        row_ids_to_drop = list(np.where(rows_to_drop)[0])
+        df_graph = df_graph.drop(index=row_ids_to_drop)
+
+    return df_graph
+
+
+def load_shape_area(df_in, color_map, sce_group_params, graph_params):
+
+    df_graph = form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branches=False)
+
+    fig = px.area(
+        df_graph,
+        x=graph_params['xcol'],
+        y=graph_params['ycol'],
+        color=graph_params['color_col'],
+        color_discrete_map=color_map,
+        line_shape='spline',
+    )
+    fig = update_to_load_shape_layout(fig)
+    fig = update_fig_styling(fig, graph_params)
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+
+
+def load_shape_disaggregated(df_in, color_map, sce_group_params, graph_params):
+
+    df_graph = form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branches=False)
+
+    fig = px.line(
+        df_graph,
+        x=graph_params['xcol'],
+        y=graph_params['ycol'],
+        color=graph_params['color_col'],
+        color_discrete_map=color_map,
     )
 
-    individual_load_scenarios, individual_load_params = load_individual_load_params()
-    df_individual_loads = df_loads[df_loads['Scenario'].isin(individual_load_scenarios)]
-    graph_load_by_sector(
-        df_in=df_individual_loads,
-        params=individual_load_params,
-        color_map=color_map,
+    if graph_params['include_sum']:
+        df_sum = pd.DataFrame(columns=[graph_params['xcol'], graph_params['ycol']])
+        for time_pt in df_graph[graph_params['xcol']].unique():
+            sum_in_t = df_graph[df_graph[graph_params['xcol']] == time_pt][graph_params['ycol']].sum()
+            df_sum.loc[len(df_sum.index)] = [time_pt, sum_in_t]
+        # add line to graph showing sum
+        fig.add_trace(go.Scatter(
+            mode='lines',
+            x=df_sum[graph_params['xcol']],
+            y=df_sum[graph_params['ycol']],
+            name="Total",
+            showlegend=True,
+            line=dict(
+                color='black',
+                dash='solid',
+            )
+        ))
+
+    fig = update_to_load_shape_layout(fig)
+    fig = update_fig_styling(fig, graph_params)
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+
+
+def multiple_load_shapes(df_in, color_map, sce_group_params, graph_params):
+
+    df_graph = form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branches=True)
+
+    fig = px.line(
+        df_graph,
+        x=graph_params['xcol'],
+        y=graph_params['ycol'],
+        color=graph_params['color_col'],
+        color_discrete_map=color_map,
     )
+    fig = update_to_load_shape_layout(fig)
+    fig = update_fig_styling(fig, graph_params)
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
 def create_scenario_copies(df):
@@ -785,57 +888,6 @@ def form_sce_group_params():
             sce_group_params[group_id][col + '_map_by_name'] = dict(zip(dfg['name'], dfg[col]))
 
     return relevant_scenarios, sce_group_params
-
-
-# TODO: rewrite this function so params are read in automatically
-def load_load_comps():
-    """ Function to load scenario comparisons as dictated in controller """
-
-    # load data related to comparisons between different scenarios
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="load_shape_comparisons")
-    relevant_scenarios = set(df['Scenario'].unique())
-
-    scenario_comp_params = []
-    for _, dfg in df.groupby('Group'):
-        params = dict()
-
-        # list of scenarios being compared
-        params['scenarios'] = dfg['Scenario'].tolist()
-
-        # dicts of scenarios --> color, name...
-        params['result_map'] = dict(zip(dfg['Scenario'], dfg['Result Variable']))
-        params['year_map'] = dict(zip(dfg['Scenario'], dfg['Year']))
-        params['name_map'] = dict(zip(dfg['Scenario'], dfg['Naming']))
-        params['line_map'] = dict(zip(dfg['Scenario'], dfg['Line']))
-        params['color_map'] = dict(zip(dfg['Scenario'], dfg['Color']))
-
-        # dicts of name --> line, color...
-        params['line_map_by_name'] = dict(zip(dfg['Naming'], dfg['Line']))
-        params['color_map_by_name'] = dict(zip(dfg['Naming'], dfg['Color']))
-
-        scenario_comp_params.append(params)
-
-    return list(relevant_scenarios), scenario_comp_params,
-
-
-# TODO: rewrite this function so params are read in automatically (and fold all load params into one fn)
-def load_individual_load_params():
-    # load data for graphs about single scenarios
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="individual_load_shapes")
-    relevant_scenarios = set(df['Scenario'].unique())
-
-    individual_load_params = []
-    for _, dfg in df.groupby('id'):
-        params = {
-            'scenario': dfg['Scenario'].unique()[0],
-            'name': dfg['Naming'].unique()[0],
-            'year': dfg['Year'].unique()[0],
-            'result_var': dfg['Result Variable'].unique()[0],
-            'name_map': dict(zip(dfg['Scenario'], dfg['Naming'])),
-        }
-        individual_load_params.append(params)
-
-    return list(relevant_scenarios), individual_load_params
 
 
 def load_color_map():
@@ -1004,77 +1056,6 @@ def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
     return df
 
 
-def graph_load_by_sector(df_in, params, color_map):
-    df = df_in.copy()
-    df['Value'] = df['Value'] / 1e3
-
-    for i, param in enumerate(params):
-        name = param['name']
-        fig = plot_area_subgroup_over_time(
-            df=df[
-                (df['Scenario'] == param['scenario']) &
-                (df['Year'] == param['year']) &
-                (df['Result Variable'] == param['result_var'])
-                ],
-            title=f"Electric Load by Sector<br>{name}",
-            xaxis_title="Representative Day",
-            yaxis_title="GW",
-            color_map=color_map,
-            yaxis_col='Value',
-            xaxis_col='Hour',
-            color_col='Branch',
-            include_sum=True,
-        )
-        fig = update_to_load_shape_layout(fig)
-        fig.write_image(FIGURES_PATH / f"load_shape_by_sector_{i}.pdf")
-
-
-def graph_load_comparison(df_in, comp_params, color_map):
-    df = sum_load_across_branches(df_in)
-    df['Value'] = df['Value'] / 1e3
-
-    for i, params in enumerate(comp_params):
-        df_graph = pd.DataFrame(columns=df.columns)
-        for sce in params['scenarios']:
-            df_graph = pd.concat([
-                df_graph,
-                df[
-                    (df['Scenario'] == sce) &
-                    (df['Year'] == params['year_map'][sce]) &
-                    (df['Result Variable'] == params['result_map'][sce])
-                    ]
-            ], axis=0, ignore_index=True)
-        df_graph = df_graph.replace({'Scenario': params['name_map']})
-        fig = plot_load_comparison(
-            df=df_graph,
-            color_col='Scenario',
-            dash_col='Scenario',
-            color_dict=params['color_map_by_name'],
-            line_dict=params['line_map_by_name'],
-            title='Load Shape',
-            xaxis_title='Representative Day of Month',
-            yaxis_title='GW',
-        )
-        fig.write_image(FIGURES_PATH / f"load_shape_comparison_{i}.pdf")
-
-
-def plot_load_comparison(df, color_col, dash_col, color_dict, line_dict, title, xaxis_title, yaxis_title):
-    fig = px.line(
-        df,
-        x='Hour',
-        y='Value',
-        color=color_col,
-        color_discrete_map=color_dict,
-        line_dash=dash_col,
-        line_dash_map=line_dict,
-    )
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = place_legend_below(fig, xaxis_title)
-    fig = update_plot_size(fig)
-    fig = update_to_load_shape_layout(fig)
-    return fig
-
-
 def update_to_load_shape_layout(fig):
     months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     fig.update_layout(
@@ -1118,42 +1099,6 @@ def sum_load_across_branches(df_in):
             df.loc[len(df.index), :] = yr, hr, sce, res, df_to_add['Value'].sum(axis=0)
 
     return df
-
-
-def plot_area_subgroup_over_time(df, title, xaxis_title, yaxis_title, color_map, yaxis_col='Value',
-                                 xaxis_col='Year', color_col='Subgroup', include_sum=True):
-    fig = px.area(
-        df,
-        x=xaxis_col,
-        y=yaxis_col,
-        color=color_col,
-        color_discrete_map=color_map,
-    )
-
-    # xaxis is a unit of time
-    # yaxis is a value (eg emissions)
-    if include_sum:
-        df_sum = pd.DataFrame(columns=[xaxis_col, yaxis_col])
-        for t in df[xaxis_col].unique():
-            sum_in_t = df[df[xaxis_col] == t][yaxis_col].sum()
-            df_sum.loc[len(df_sum.index)] = [t, sum_in_t]
-        # add line to graph showing sum
-        fig.add_trace(go.Scatter(
-            mode='lines',
-            x=df_sum[xaxis_col],
-            y=df_sum[yaxis_col],
-            name="Total",
-            showlegend=True,
-            line=dict(
-                color='black',
-                dash='solid',
-            )
-        ))
-
-    fig = update_titles(fig, title, xaxis_title, yaxis_title)
-    fig = place_legend_below(fig, xaxis_title)
-    fig = update_plot_size(fig)
-    return fig
 
 
 def update_titles(fig, title, xaxis_title, yaxis_title):
