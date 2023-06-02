@@ -22,10 +22,6 @@ CAPITAL_RECOVERY_FACTOR = (DISCOUNT_RATE * ((1 + DISCOUNT_RATE) ** TOTAL_YEARS))
 # LEAP result strings
 EMISSIONS_RESULT_STRING = "One_Hundred Year GWP Direct At Point of Emissions"
 COST_RESULT_STRING = "Social Costs"
-GENERATION_STRING = "Outputs by Output Fuel"
-CAPACITY_ADDED_STRING = "Capacity Added"
-ENERGY_DEMAND_STRING = "Energy Demand Final Units"
-INPUTS_STRING = "Inputs"
 
 # Fuels
 FUELS_TO_COMBINE = {
