@@ -57,20 +57,21 @@ def main():
     _, all_sce_group_params = form_sce_group_params()
 
     # create result graphs
-    # result_graphs(
-    #     df, color_map, branch_maps, all_sce_group_params,
-    #     (
-    #         (lines_over_time, 'lines_over_time'),
-    #         (bars_over_time, 'bars_over_time'),
-    #         (bars_over_scenarios, 'bars_over_scenarios'),
-    #         (diff_xaxis_lines, 'diff_xaxis_lines'),
-    #         (diff_xaxis_bars, 'diff_xaxis_bars'),
-    #         (x_y_scatter, 'x_y_scatter'),
-    #         (tornado, 'tornado'),
-    #         (macc, 'macc'),
-    #     )
-    # )
+    result_graphs(
+        df, color_map, branch_maps, all_sce_group_params,
+        (
+            (lines_over_time, 'lines_over_time'),
+            (bars_over_time, 'bars_over_time'),
+            (bars_over_scenarios, 'bars_over_scenarios'),
+            (diff_xaxis_lines, 'diff_xaxis_lines'),
+            (diff_xaxis_bars, 'diff_xaxis_bars'),
+            (x_y_scatter, 'x_y_scatter'),
+            (tornado, 'tornado'),
+            (macc, 'macc'),
+        )
+    )
 
+    # load shape graphs
     load_graphs(
         df_loads, color_map, all_sce_group_params,
         (
@@ -633,6 +634,7 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
     df_graph['mid_x'] = (df_graph['end_range_x'] + df_graph['start_range_x']) / 2.0
 
     fig = go.Figure()
+    legend_entries = []
     for sce in sce_group_params['scenarios']:
         df_sce = df_graph[df_graph['Scenario'] == sce].copy()
         fig.add_trace(go.Bar(
@@ -640,11 +642,29 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
             width=df_sce['width'],
             y=df_sce['Value_y'],
             text=sce_group_params['name_map'][sce],
-            showlegend=False,
+            name=df_sce[graph_params['color_col']].unique()[0],
+            showlegend=df_sce[graph_params['color_col']].unique()[0] not in legend_entries,
             marker=dict(
                 color=color_map[df_sce[graph_params['color_col']].unique()[0]],
             ),
         ))
+        legend_entries.append(df_sce[graph_params['color_col']].unique()[0])
+
+    # text annotations
+    # for sce in sce_group_params['scenarios']:
+    #     df_sce = df_graph[df_graph['Scenario'] == sce].copy()
+    #     fig.add_annotation(
+    #         x=df_sce['mid_x'].unique()[0],
+    #         y=df_sce['Value_y'].unique()[0],
+    #         text=sce_group_params['name_map'][sce],
+    #         textangle=45,
+    #         showarrow=True,
+    #         arrowhead=1,
+    #         yshift=10,
+    #     )
+
+    #TODO: text annotation w/ arrowhead (https://plotly.com/python/text-and-annotations/)
+
 
     # add in tick marks
     fig.update_xaxes(
