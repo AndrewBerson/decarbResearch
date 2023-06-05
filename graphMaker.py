@@ -52,61 +52,67 @@ def main():
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
 
+    # read in from controller which types of graphs to make
+    df_active_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name='active_graphs')
+    active_graphs = dict(zip(df_active_graphs['graph_type'], df_active_graphs['active']))
+
     # create result graphs
     result_graphs(
         df, color_map, branch_maps, all_sce_group_params,
         (
-            # (lines_over_time, 'lines_over_time'),
-            # (bars_over_time, 'bars_over_time'),
-            # (bars_over_scenarios, 'bars_over_scenarios'),
-            # (diff_xaxis_lines, 'diff_xaxis_lines'),
-            # (diff_xaxis_bars, 'diff_xaxis_bars'),
-            # (x_y_scatter, 'x_y_scatter'),
-            # (tornado, 'tornado'),
-            (macc, 'macc'),
+            (lines_over_time, 'lines_over_time', active_graphs['lines_over_time']),
+            (bars_over_time, 'bars_over_time', active_graphs['bars_over_time']),
+            (bars_over_scenarios, 'bars_over_scenarios', active_graphs['bars_over_scenarios']),
+            (diff_xaxis_lines, 'diff_xaxis_lines', active_graphs['diff_xaxis_lines']),
+            (diff_xaxis_bars, 'diff_xaxis_bars', active_graphs['diff_xaxis_bars']),
+            (x_y_scatter, 'x_y_scatter', active_graphs['x_y_scatter']),
+            (tornado, 'tornado', active_graphs['tornado']),
+            (macc, 'macc', active_graphs['macc']),
         )
     )
 
     # load shape graphs
-    # load_graphs(
-    #     df_loads, color_map, all_sce_group_params,
-    #     (
-    #         (load_shape_area, 'load_shape_area'),
-    #         (load_shape_disaggregated, 'load_shape_disaggregated'),
-    #         (multiple_load_shapes, 'multiple_load_shapes'),
-    #     ),
-    # )
+    load_graphs(
+        df_loads, color_map, all_sce_group_params,
+        (
+            (load_shape_area, 'load_shape_area', active_graphs['load_shape_area']),
+            (load_shape_disaggregated, 'load_shape_disaggregated', active_graphs['load_shape_disaggregated']),
+            (multiple_load_shapes, 'multiple_load_shapes', active_graphs['multiple_load_shapes']),
+        ),
+    )
 
 
-def load_graphs(df, color_map, all_sce_group_params, fns_sheets):
-    for fn, sheet in fns_sheets:
-        df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
-        df_graphs = df_graphs.fillna('')
+def load_graphs(df, color_map, all_sce_group_params, fns_sheets_active):
+    for fn, sheet, active in fns_sheets_active:
+        if active:
+            df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
+            df_graphs = df_graphs.fillna('')
 
-        for _, row in df_graphs.iterrows():
-            if row['make_graph']:
-                fn(
-                    df_in=df,
-                    color_map=color_map,
-                    sce_group_params=all_sce_group_params[row['group_id']],
-                    graph_params=row.to_dict(),
-                )
+            for _, row in df_graphs.iterrows():
+                if row['make_graph']:
+                    fn(
+                        df_in=df,
+                        color_map=color_map,
+                        sce_group_params=all_sce_group_params[row['group_id']],
+                        graph_params=row.to_dict(),
+                    )
 
 
-def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets):
-    for fn, sheet in fns_sheets:
-        df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
-        df_graphs = df_graphs.fillna('')
+def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets_active):
+    for fn, sheet, active in fns_sheets_active:
+        if active:
+            df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
+            df_graphs = df_graphs.fillna('')
 
-        for _, row in df_graphs.iterrows():
-            if row['make_graph']:
-                fn(
-                    df_in=df,
-                    color_map=color_map,
-                    branch_maps=branch_maps,
-                    sce_group_params=all_sce_group_params[row['group_id']],
-                    graph_params=row.to_dict(),
-                )
+            for _, row in df_graphs.iterrows():
+                if row['make_graph']:
+                    fn(
+                        df_in=df,
+                        color_map=color_map,
+                        branch_maps=branch_maps,
+                        sce_group_params=all_sce_group_params[row['group_id']],
+                        graph_params=row.to_dict(),
+                    )
 
 
 def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumulative, discount, filter_yrs,
@@ -343,6 +349,39 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
         )
 
     fig = update_fig_styling(fig, graph_params)
+
+    if graph_params['mark_sum']:
+        groupby = list({graph_params['xcol'], graph_params['ycol']} - {'Value'})
+        df_graph = df_graph.groupby(by=groupby, as_index=False)['Value'].sum()
+        fig.add_trace(go.Scatter(
+            mode='markers',
+            x=df_graph[graph_params['xcol']],
+            y=df_graph[graph_params['ycol']],
+            name='Total',
+            showlegend=True,
+            marker=dict(
+                color='LightSkyBlue',
+                size=10,
+                line=dict(
+                    color='MediumPurple',
+                    width=2
+                )
+            ),
+        ))
+
+    if graph_params['annotate_sum']:
+        groupby = list({graph_params['xcol'], graph_params['ycol']} - {'Value'})
+        df_graph = df_graph.groupby(by=groupby, as_index=False)['Value'].sum()
+        for _, row in df_graph.iterrows():
+            fig.add_annotation(
+                x=row[graph_params['xcol']],
+                y=row[graph_params['ycol']],
+                text=f"{row['Value']:.1f}",
+                xshift=0,
+                yshift=0,
+                showarrow=False,
+            )
+
     fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
 
 
@@ -715,8 +754,15 @@ def update_fig_styling(fig, graph_params):
     # update text annotations
     if 'annotate' in graph_params:
         if graph_params['annotate']:
-            fig.update_traces(textfont_size=10, textposition='outside', textangle=graph_params['annotation_angle'])
-            fig.update_layout(uniformtext_minsize=8, uniformtext_mode='hide')
+            fig.update_traces(
+                textfont_size=10,
+                textposition=graph_params['annotation_position'],
+                textangle=graph_params['annotation_angle'],
+            )
+            fig.update_layout(
+                uniformtext_minsize=8,
+                uniformtext_mode='hide',
+            )
 
     return fig
 
