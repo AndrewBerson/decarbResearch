@@ -56,26 +56,26 @@ def main():
     result_graphs(
         df, color_map, branch_maps, all_sce_group_params,
         (
-            (lines_over_time, 'lines_over_time'),
-            (bars_over_time, 'bars_over_time'),
-            (bars_over_scenarios, 'bars_over_scenarios'),
-            (diff_xaxis_lines, 'diff_xaxis_lines'),
-            (diff_xaxis_bars, 'diff_xaxis_bars'),
-            (x_y_scatter, 'x_y_scatter'),
-            (tornado, 'tornado'),
+            # (lines_over_time, 'lines_over_time'),
+            # (bars_over_time, 'bars_over_time'),
+            # (bars_over_scenarios, 'bars_over_scenarios'),
+            # (diff_xaxis_lines, 'diff_xaxis_lines'),
+            # (diff_xaxis_bars, 'diff_xaxis_bars'),
+            # (x_y_scatter, 'x_y_scatter'),
+            # (tornado, 'tornado'),
             (macc, 'macc'),
         )
     )
 
     # load shape graphs
-    load_graphs(
-        df_loads, color_map, all_sce_group_params,
-        (
-            (load_shape_area, 'load_shape_area'),
-            (load_shape_disaggregated, 'load_shape_disaggregated'),
-            (multiple_load_shapes, 'multiple_load_shapes'),
-        ),
-    )
+    # load_graphs(
+    #     df_loads, color_map, all_sce_group_params,
+    #     (
+    #         (load_shape_area, 'load_shape_area'),
+    #         (load_shape_disaggregated, 'load_shape_disaggregated'),
+    #         (multiple_load_shapes, 'multiple_load_shapes'),
+    #     ),
+    # )
 
 
 def load_graphs(df, color_map, all_sce_group_params, fns_sheets):
@@ -637,7 +637,6 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
             x=df_sce['mid_x'],
             width=df_sce['width'],
             y=df_sce['Value_y'],
-            text=sce_group_params['name_map'][sce],
             name=df_sce[graph_params['color_col']].unique()[0],
             showlegend=df_sce[graph_params['color_col']].unique()[0] not in legend_entries,
             marker=dict(
@@ -647,20 +646,22 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
         legend_entries.append(df_sce[graph_params['color_col']].unique()[0])
 
     # text annotations
-    # for sce in sce_group_params['scenarios']:
-    #     df_sce = df_graph[df_graph['Scenario'] == sce].copy()
-    #     fig.add_annotation(
-    #         x=df_sce['mid_x'].unique()[0],
-    #         y=df_sce['Value_y'].unique()[0],
-    #         text=sce_group_params['name_map'][sce],
-    #         textangle=45,
-    #         showarrow=True,
-    #         arrowhead=1,
-    #         yshift=10,
-    #     )
-
-    #TODO: text annotation w/ arrowhead (https://plotly.com/python/text-and-annotations/)
-
+    for sce in sce_group_params['scenarios']:
+        df_sce = df_graph[df_graph['Scenario'] == sce].copy()
+        fig.add_annotation(
+            x=df_sce['mid_x'].unique()[0],
+            y=max(0, df_sce['Value_y'].unique()[0]) + 90,
+            text=sce_group_params['name_map'][sce],
+            textangle=90,
+            showarrow=True,
+            startarrowsize=0.3,
+            yanchor='auto',
+            yshift=0,
+            font=dict(
+                color='black',
+                size=8.5,
+            )
+        )
 
     # add in tick marks
     fig.update_xaxes(
