@@ -29,13 +29,9 @@ FUELS_TO_COMBINE = {
     "CNG": "NG",
     "Hydrogen Transmitted": "Hydrogen"
 }
-RESOURCE_PROXY = {
-    'name':     ['Today', 'Today', 'Resource Proxy', 'Resource Proxy'],
-    'Scenario': ['Today', 'Today', 'Resource Proxy', 'Resource Proxy'],
-    'Fuel':     ['RNG', 'Renewable Diesel', 'RNG', 'Renewable Diesel'],
-    'Value':    [55*1e6, 95*1e6, 455*1e6, 285*1e6],
-    'sce_num':  [100, 100, -2, -2],
-}
+
+IMAGE_FORMAT = ".pdf"
+IMAGE_SCALE = 1
 
 
 def main():
@@ -210,7 +206,8 @@ def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_param
         ))
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.png", scale = 2)
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -273,7 +270,8 @@ def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params
         ))
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -301,14 +299,6 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
         fuel_filter=fuel_filter,
         groupby=list(groupby)
     )
-
-    # add in fuel proxy
-    if graph_params['include_fuel_proxy']:
-        df_graph = pd.concat([df_graph, pd.DataFrame.from_dict(RESOURCE_PROXY)], axis=0, sort=True)
-        df_graph.loc[
-            df_graph['Scenario'].isin(RESOURCE_PROXY['Scenario']),
-            'Value'
-        ] *= graph_params['multiplier']
 
     # sort dataframe
     category_orders = dict()
@@ -376,13 +366,14 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             fig.add_annotation(
                 x=row[graph_params['xcol']],
                 y=row[graph_params['ycol']],
-                text=f"{row['Value']:.1f}",
+                text=f"{row['Value']:{graph_params['annotation_style']}}",
                 xshift=0,
                 yshift=0,
                 showarrow=False,
             )
 
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -425,7 +416,8 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
     )
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -477,7 +469,8 @@ def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_param
         )
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -534,7 +527,8 @@ def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
     fig.update_traces(marker={'size': 10})
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -617,7 +611,8 @@ def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
         ))
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
@@ -720,7 +715,8 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
     fig.update_layout(uniformtext_minsize=6, uniformtext_mode='hide')
 
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def update_fig_styling(fig, graph_params):
@@ -813,7 +809,8 @@ def load_shape_area(df_in, color_map, sce_group_params, graph_params):
     )
     fig = update_to_load_shape_layout(fig)
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def load_shape_disaggregated(df_in, color_map, sce_group_params, graph_params):
@@ -848,7 +845,8 @@ def load_shape_disaggregated(df_in, color_map, sce_group_params, graph_params):
 
     fig = update_to_load_shape_layout(fig)
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def multiple_load_shapes(df_in, color_map, sce_group_params, graph_params):
@@ -864,7 +862,8 @@ def multiple_load_shapes(df_in, color_map, sce_group_params, graph_params):
     )
     fig = update_to_load_shape_layout(fig)
     fig = update_fig_styling(fig, graph_params)
-    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}.pdf")
+    fig.write_image(FIGURES_PATH / f"{graph_params['fname']}_{graph_params['group_id']}{IMAGE_FORMAT}",
+                    scale=IMAGE_SCALE)
 
 
 def create_scenario_copies(df):
