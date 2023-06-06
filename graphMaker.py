@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # Paths
-INPUT_PATH = Path("resultsFiles/combinedResults")
+INPUT_PATH = Path("resultsFiles/112_31results")
 CONTROLLER_PATH = INPUT_PATH / "results_controller"
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 FIGURES_PATH = INPUT_PATH / "new_figures"
@@ -128,6 +128,9 @@ def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumu
         df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
         df_graph['Value'] = df_graph['Value'] * multiplier
 
+        # combine fuels
+        df_graph = df_graph.replace({"Fuel": FUELS_TO_COMBINE})
+
         # if specified, filter for specific fuels
         if fuel_filter is not None:
             df_graph = df_graph[df_graph['Fuel'].isin(fuel_filter)].copy()
@@ -140,9 +143,6 @@ def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumu
 
         if cumulative:
             df_graph = cumsum_it(df_graph)
-
-        # combine fuels
-        df_graph = df_graph.replace({"Fuel": FUELS_TO_COMBINE})
 
         # get rid of years not specified to be included
         if filter_yrs:
@@ -984,6 +984,8 @@ def calculate_annual_result_by_subgroup(df_in, result, subgroup_dict):
         )
         row_ids = list(np.where(mask)[0])
         for subgroup, branches in subgroup_dict.items():
+            # eliminate branches that do not appear in dfg
+            branches = list(set(branches).intersection(set(dfg.columns)))
             value = dfg[branches].iloc[row_ids].sum(axis=1).sum()
             df_out.loc[len(df_out.index)] = [yr, sce, fuel, subgroup, value]
 
