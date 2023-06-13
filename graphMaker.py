@@ -6,10 +6,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # Paths
-INPUT_PATH = Path("resultsFiles/112_31results")
-CONTROLLER_PATH = INPUT_PATH / "results_controller"
-CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
-FIGURES_PATH = INPUT_PATH / "new_figures"
+INPUT_PATH_112_28 = Path("resultsFiles/112_28results/clean_results")
+INPUT_PATH_112_31 = Path("resultsFiles/112_31results/clean_results")
+CONTROLLER_PATH = Path("resultsFiles/results_controller")
+FIGURES_PATH = Path("resultsFiles/new_figures")
 
 # Years, discount rate, capital recovery factor
 BASE_YEAR = 2018
@@ -36,22 +36,40 @@ IMAGE_SCALE = 1
 
 def main():
     # load data and make copies of scenarios specified in the controller
-    df = pd.read_csv(CLEAN_RESULTS_PATH / 'combined_results.csv', header=0, index_col=0)
-    df = create_scenario_copies(df)
-    df_loads = pd.read_csv(CLEAN_RESULTS_PATH / "shapes.csv", header=0, index_col=0)
-    df_loads = create_scenario_copies(df_loads)
+    df_112_28, df_112_28_loads = load_data(INPUT_PATH_112_28)
+    df_112_31, df_112_31_loads = load_data(INPUT_PATH_112_28)
+
 
     # create color and branch maps
     color_map = load_map('color_map')
     active_graph_map = load_map('active_graph_map')
-    branch_maps = form_branch_maps(df)
+    branch_maps = form_branch_maps(pd.concat([df_112_28, df_112_31], ignore_index=True, sort=True))
 
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
 
     # create result graphs
     result_graphs(
-        df=df,
+        df=df_112_28,
+        folder='112_28results',
+        color_map=color_map,
+        branch_maps=branch_maps,
+        all_sce_group_params=all_sce_group_params,
+        fns_sheets_active=(
+            (lines_over_time, 'lines_over_time', active_graph_map['lines_over_time']),
+            (bars_over_time, 'bars_over_time', active_graph_map['bars_over_time']),
+            (bars_over_scenarios, 'bars_over_scenarios', active_graph_map['bars_over_scenarios']),
+            (diff_xaxis_lines, 'diff_xaxis_lines', active_graph_map['diff_xaxis_lines']),
+            (diff_xaxis_bars, 'diff_xaxis_bars', active_graph_map['diff_xaxis_bars']),
+            (x_y_scatter, 'x_y_scatter', active_graph_map['x_y_scatter']),
+            (tornado, 'tornado', active_graph_map['tornado']),
+            (macc, 'macc', active_graph_map['macc']),
+        )
+    )
+
+    result_graphs(
+        df=df_112_31,
+        folder='112_31results',
         color_map=color_map,
         branch_maps=branch_maps,
         all_sce_group_params=all_sce_group_params,
@@ -69,7 +87,20 @@ def main():
 
     # load shape graphs
     load_graphs(
-        df=df_loads,
+        df=df_112_31_loads,
+        folder='112_31results',
+        color_map=color_map,
+        all_sce_group_params=all_sce_group_params,
+        fns_sheets_active=(
+            (load_shape_area, 'load_shape_area', active_graph_map['load_shape_area']),
+            (load_shape_disaggregated, 'load_shape_disaggregated', active_graph_map['load_shape_disaggregated']),
+            (multiple_load_shapes, 'multiple_load_shapes', active_graph_map['multiple_load_shapes']),
+        ),
+    )
+
+    load_graphs(
+        df=df_112_28_loads,
+        folder='112_28results',
         color_map=color_map,
         all_sce_group_params=all_sce_group_params,
         fns_sheets_active=(
@@ -80,7 +111,15 @@ def main():
     )
 
 
-def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets_active):
+def load_data(input_path):
+    df = pd.read_csv(input_path / 'combined_results.csv', header=0, index_col=0)
+    df = create_scenario_copies(df)
+    df_loads = pd.read_csv(input_path / "shapes.csv", header=0, index_col=0)
+    df_loads = create_scenario_copies(df_loads)
+
+    return df, df_loads
+
+def result_graphs(df, folder, color_map, branch_maps, all_sce_group_params, fns_sheets_active):
     """
     Function to make graphs from results
     :param df: DataFrame of results
@@ -101,7 +140,7 @@ def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets_a
 
             # make a graph for each row
             for _, row in df_graphs.iterrows():
-                if row['make_graph']:
+                if row['make_graph'] and row['folder'] == folder:
                     fn(
                         df_in=df,
                         color_map=color_map,
@@ -111,7 +150,7 @@ def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets_a
                     )
 
 
-def load_graphs(df, color_map, all_sce_group_params, fns_sheets_active):
+def load_graphs(df, folder, color_map, all_sce_group_params, fns_sheets_active):
     """
     Function to make graphs of load shapes from results
     :param df: DataFrame of results
@@ -131,7 +170,7 @@ def load_graphs(df, color_map, all_sce_group_params, fns_sheets_active):
 
             # make a graph for each row
             for _, row in df_graphs.iterrows():
-                if row['make_graph']:
+                if row['make_graph'] and row['folder'] == folder:
                     fn(
                         df_in=df,
                         color_map=color_map,
@@ -193,16 +232,16 @@ def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumu
         if cumulative:
             df_graph = cumsum_it(df_graph)
 
-        # get rid of years not specified to be included
-        if filter_yrs:
-            for sce, yr in sce_group_params['specified_year_map'].items():
-                df_graph = df_graph.reset_index(drop=True)
-                rows_to_drop = np.array(
-                    (df_graph['Scenario'] == sce) &
-                    (df_graph['Year'] != yr)
-                )
-                row_ids_to_drop = list(np.where(rows_to_drop)[0])
-                df_graph = df_graph.drop(index=row_ids_to_drop)
+    # get rid of years not specified to be included
+    if filter_yrs:
+        for sce, yr in sce_group_params['specified_year_map'].items():
+            df_graph = df_graph.reset_index(drop=True)
+            rows_to_drop = np.array(
+                (df_graph['Scenario'] == sce) &
+                (df_graph['Year'] != yr)
+            )
+            row_ids_to_drop = list(np.where(rows_to_drop)[0])
+            df_graph = df_graph.drop(index=row_ids_to_drop)
 
     # get rid of unneeded scenarios
     df_graph = df_graph[df_graph['Scenario'].isin(sce_group_params['scenarios'])].copy()
