@@ -23,13 +23,13 @@ CAPITAL_RECOVERY_FACTOR = (DISCOUNT_RATE * ((1 + DISCOUNT_RATE) ** TOTAL_YEARS))
 EMISSIONS_RESULT_STRING = "One_Hundred Year GWP Direct At Point of Emissions"
 COST_RESULT_STRING = "Social Costs"
 
-# Fuels
+# Fuels that are equivalent
 FUELS_TO_COMBINE = {
     "CRNG": "RNG",
     "CNG": "NG",
     "Hydrogen Transmitted": "Hydrogen"
 }
-
+# image formatting
 IMAGE_FORMAT = ".pdf"
 IMAGE_SCALE = 1
 
@@ -42,64 +42,64 @@ def main():
     df_loads = create_scenario_copies(df_loads)
 
     # create color and branch maps
-    color_map = load_color_map()
+    color_map = load_map('color_map')
+    active_graph_map = load_map('active_graph_map')
     branch_maps = form_branch_maps(df)
 
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
 
-    # read in from controller which types of graphs to make
-    df_active_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name='active_graphs')
-    active_graphs = dict(zip(df_active_graphs['graph_type'], df_active_graphs['active']))
-
     # create result graphs
     result_graphs(
-        df, color_map, branch_maps, all_sce_group_params,
-        (
-            (lines_over_time, 'lines_over_time', active_graphs['lines_over_time']),
-            (bars_over_time, 'bars_over_time', active_graphs['bars_over_time']),
-            (bars_over_scenarios, 'bars_over_scenarios', active_graphs['bars_over_scenarios']),
-            (diff_xaxis_lines, 'diff_xaxis_lines', active_graphs['diff_xaxis_lines']),
-            (diff_xaxis_bars, 'diff_xaxis_bars', active_graphs['diff_xaxis_bars']),
-            (x_y_scatter, 'x_y_scatter', active_graphs['x_y_scatter']),
-            (tornado, 'tornado', active_graphs['tornado']),
-            (macc, 'macc', active_graphs['macc']),
+        df=df,
+        color_map=color_map,
+        branch_maps=branch_maps,
+        all_sce_group_params=all_sce_group_params,
+        fns_sheets_active=(
+            (lines_over_time, 'lines_over_time', active_graph_map['lines_over_time']),
+            (bars_over_time, 'bars_over_time', active_graph_map['bars_over_time']),
+            (bars_over_scenarios, 'bars_over_scenarios', active_graph_map['bars_over_scenarios']),
+            (diff_xaxis_lines, 'diff_xaxis_lines', active_graph_map['diff_xaxis_lines']),
+            (diff_xaxis_bars, 'diff_xaxis_bars', active_graph_map['diff_xaxis_bars']),
+            (x_y_scatter, 'x_y_scatter', active_graph_map['x_y_scatter']),
+            (tornado, 'tornado', active_graph_map['tornado']),
+            (macc, 'macc', active_graph_map['macc']),
         )
     )
 
     # load shape graphs
     load_graphs(
-        df_loads, color_map, all_sce_group_params,
-        (
-            (load_shape_area, 'load_shape_area', active_graphs['load_shape_area']),
-            (load_shape_disaggregated, 'load_shape_disaggregated', active_graphs['load_shape_disaggregated']),
-            (multiple_load_shapes, 'multiple_load_shapes', active_graphs['multiple_load_shapes']),
+        df=df_loads,
+        color_map=color_map,
+        all_sce_group_params=all_sce_group_params,
+        fns_sheets_active=(
+            (load_shape_area, 'load_shape_area', active_graph_map['load_shape_area']),
+            (load_shape_disaggregated, 'load_shape_disaggregated', active_graph_map['load_shape_disaggregated']),
+            (multiple_load_shapes, 'multiple_load_shapes', active_graph_map['multiple_load_shapes']),
         ),
     )
 
 
-def load_graphs(df, color_map, all_sce_group_params, fns_sheets_active):
-    for fn, sheet, active in fns_sheets_active:
-        if active:
-            df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
-            df_graphs = df_graphs.fillna('')
-
-            for _, row in df_graphs.iterrows():
-                if row['make_graph']:
-                    fn(
-                        df_in=df,
-                        color_map=color_map,
-                        sce_group_params=all_sce_group_params[row['group_id']],
-                        graph_params=row.to_dict(),
-                    )
-
-
 def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets_active):
+    """
+    Function to make graphs from results
+    :param df: DataFrame of results
+    :param color_map: dict of keys to hex color values
+    :param branch_maps: numerous dicts of LEAP branches --> groupings
+    :param all_sce_group_params: info found in tab "scenario group params" of controller
+    :param fns_sheets_active: tuple of tuples, where the inner tuple contains (fn, sheet name, on/off switch)
+    :return: NA
+    """
+
+    # iterate through all graphing functions
     for fn, sheet, active in fns_sheets_active:
         if active:
+
+            # read graph params from excel controller tab
             df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
             df_graphs = df_graphs.fillna('')
 
+            # make a graph for each row
             for _, row in df_graphs.iterrows():
                 if row['make_graph']:
                     fn(
@@ -111,20 +111,70 @@ def result_graphs(df, color_map, branch_maps, all_sce_group_params, fns_sheets_a
                     )
 
 
+def load_graphs(df, color_map, all_sce_group_params, fns_sheets_active):
+    """
+    Function to make graphs of load shapes from results
+    :param df: DataFrame of results
+    :param color_map: dict of keys to hex color values
+    :param all_sce_group_params: info found in tab "scenario group params" of controller
+    :param fns_sheets_active: tuple of tuples, where the inner tuple contains (fn, sheet name, on/off switch)
+    :return: NA
+    """
+
+    # iterate through all graphing functions
+    for fn, sheet, active in fns_sheets_active:
+        if active:
+
+            # read graph params from excel controller tab
+            df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
+            df_graphs = df_graphs.fillna('')
+
+            # make a graph for each row
+            for _, row in df_graphs.iterrows():
+                if row['make_graph']:
+                    fn(
+                        df_in=df,
+                        color_map=color_map,
+                        sce_group_params=all_sce_group_params[row['group_id']],
+                        graph_params=row.to_dict(),
+                    )
+
+
 def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumulative, discount, filter_yrs,
                   branch_map, fuel_filter, groupby):
+    """
+    Function to make dataframe for graphing according to instructions in controller
+    :param df_in: DataFrame of results
+    :param sce_group_params: info contained in "scenario group params" tab of controller
+    :param result: what result(s) to evaluate
+    :param multiplier: value to scale results
+    :param marginalize: T/F whether to marginalize results
+    :param cumulative: T/F if results are cumulative sum
+    :param discount: T/F if results should be discounted by discount rate
+    :param filter_yrs: T/F if scenarios have 1 relevant yr, or if all yrs are relevant
+    :param branch_map: map from LEAP branch --> Subgroup
+    :param fuel_filter: list of fuels to filter for
+    :param groupby: List of params that should be grouped together
+    :return: DataFrame of results that will be used to make the graph
+    """
     # filter out irrelevant scenarios
     df_graph = df_in[df_in['Scenario'].isin(sce_group_params['relevant_scenarios'])].copy()
 
     # Calculate result (special function for cost of abatement)
     if result == ['cost of abatement']:
-        df_graph = evaluate_dollar_per_ton_abated(
-            df_in=df_graph[df_graph['Scenario'].isin(sce_group_params['relevant_scenarios'])],
+        # calculate cost of abatement
+        df_graph_1 = evaluate_dollar_per_ton_abated(
+            df_in=df_graph,
             subgroup_dict=branch_map,
             relative_to_map=sce_group_params['relative_to_map'],
         )
+        # get any cost of abatements published by CARB
+        df_graph_2 = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
+        # combine results
+        df_graph = pd.concat([df_graph_1, df_graph_2], ignore_index=True, sort=True)
         df_graph['Value'] = df_graph['Value'] * multiplier
     else:
+        # calculate result
         df_graph = calculate_annual_result_by_subgroup(df_graph, result, branch_map)
         df_graph['Value'] = df_graph['Value'] * multiplier
 
@@ -135,12 +185,11 @@ def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumu
         if fuel_filter is not None:
             df_graph = df_graph[df_graph['Fuel'].isin(fuel_filter)].copy()
 
+        # discount, marginalize, cumsum
         if discount:
             df_graph = discount_it(df_graph)
-
         if marginalize:
             df_graph = marginalize_it(df_graph, sce_group_params['relative_to_map'])
-
         if cumulative:
             df_graph = cumsum_it(df_graph)
 
@@ -170,12 +219,23 @@ def form_df_graph(df_in, sce_group_params, result, multiplier, marginalize, cumu
 
 
 def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
+    # establish fuel filter
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
     else:
         fuel_filter = [fuel.strip() for fuel in graph_params['fuel_filter'].split(',')]
 
+    # Evaluate result
     df_graph = form_df_graph(
         df_in=df_in,
         sce_group_params=sce_group_params,
@@ -190,6 +250,7 @@ def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_param
         groupby=list({'Scenario', graph_params['xcol'], graph_params['ycol']} - {'Value'})
     )
 
+    # Create graphic
     fig = go.Figure()
     for sce in sce_group_params['scenarios']:
         df_sce = df_graph[df_graph['Scenario'] == sce].copy()
@@ -211,6 +272,16 @@ def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_param
 
 
 def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
+
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -275,6 +346,15 @@ def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params
 
 
 def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -283,7 +363,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
 
     groupby = {'Scenario', graph_params['xcol'], graph_params['ycol'], graph_params['color_col']} - {'Value'}
     if graph_params['sort_by'] != '':
-        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
         groupby.update(set(sort_by))
 
     df_graph = form_df_graph(
@@ -303,7 +383,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
     # sort dataframe
     category_orders = dict()
     if graph_params['sort_by'] != '':
-        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
         df_graph = df_graph.sort_values(by=sort_by, ignore_index=True, ascending=graph_params['sort_ascending'])
         if graph_params['xcol'] == 'Value':
             category_orders = {graph_params['ycol']: df_graph[graph_params['ycol']].tolist()}
@@ -377,6 +457,15 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
 
 
 def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -385,7 +474,7 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
 
     groupby = {'Scenario', graph_params['xcol'], graph_params['ycol'], graph_params['color_col']} - {'Value'}
     if graph_params['sort_by'] != '':
-        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
         groupby.update(set(sort_by))
 
     df_graph = form_df_graph(
@@ -403,7 +492,7 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
     )
 
     if graph_params['sort_by'] != '':
-        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
         df_graph = df_graph.sort_values(by=sort_by, ascending=graph_params['sort_ascending'], ignore_index=True)
 
     fig = px.line(
@@ -421,6 +510,15 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
 
 
 def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -474,6 +572,15 @@ def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_param
 
 
 def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -532,6 +639,15 @@ def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
 
 def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -568,7 +684,7 @@ def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     category_orders = dict()
     if graph_params['sort_by'] != '':
-        sort_by = [sort_col for sort_col in graph_params['sort_by'].split(',')]
+        sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
         df_graph = df_graph.sort_values(by=sort_by, ignore_index=True, ascending=graph_params['sort_ascending'])
         if graph_params['xcol'] == 'bar_height':
             category_orders = {graph_params['ycol']: df_graph[graph_params['ycol']].tolist()}
@@ -616,6 +732,15 @@ def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
 
 def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
+    """
+    Graph result from a single scenario over time
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
@@ -952,9 +1077,9 @@ def form_sce_group_params():
     return relevant_scenarios, sce_group_params
 
 
-def load_color_map():
+def load_map(sheet_name):
     """ Function to load color map from controller """
-    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name="color_map")
+    df = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet_name)
 
     return dict(zip(df['key'], df['value']))
 
