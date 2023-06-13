@@ -29,7 +29,8 @@ FUELS_TO_COMBINE = {
     "CNG": "NG",
     "Hydrogen Transmitted": "Hydrogen"
 }
-# image formatting
+
+# Image formatting
 IMAGE_FORMAT = ".pdf"
 IMAGE_SCALE = 1
 
@@ -37,7 +38,7 @@ IMAGE_SCALE = 1
 def main():
     # load data and make copies of scenarios specified in the controller
     df_112_28, df_112_28_loads = load_data(INPUT_PATH_112_28)
-    df_112_31, df_112_31_loads = load_data(INPUT_PATH_112_28)
+    df_112_31, df_112_31_loads = load_data(INPUT_PATH_112_31)
 
 
     # create color and branch maps
@@ -48,6 +49,23 @@ def main():
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
 
+    result_fns_sheets_active = (
+        (lines_over_time, 'lines_over_time', active_graph_map['lines_over_time']),
+        (bars_over_time, 'bars_over_time', active_graph_map['bars_over_time']),
+        (bars_over_scenarios, 'bars_over_scenarios', active_graph_map['bars_over_scenarios']),
+        (diff_xaxis_lines, 'diff_xaxis_lines', active_graph_map['diff_xaxis_lines']),
+        (diff_xaxis_bars, 'diff_xaxis_bars', active_graph_map['diff_xaxis_bars']),
+        (x_y_scatter, 'x_y_scatter', active_graph_map['x_y_scatter']),
+        (tornado, 'tornado', active_graph_map['tornado']),
+        (macc, 'macc', active_graph_map['macc']),
+    )
+
+    load_fns_sheets_active = (
+        (load_shape_area, 'load_shape_area', active_graph_map['load_shape_area']),
+        (load_shape_disaggregated, 'load_shape_disaggregated', active_graph_map['load_shape_disaggregated']),
+        (multiple_load_shapes, 'multiple_load_shapes', active_graph_map['multiple_load_shapes']),
+    )
+
     # create result graphs
     result_graphs(
         df=df_112_28,
@@ -55,16 +73,7 @@ def main():
         color_map=color_map,
         branch_maps=branch_maps,
         all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=(
-            (lines_over_time, 'lines_over_time', active_graph_map['lines_over_time']),
-            (bars_over_time, 'bars_over_time', active_graph_map['bars_over_time']),
-            (bars_over_scenarios, 'bars_over_scenarios', active_graph_map['bars_over_scenarios']),
-            (diff_xaxis_lines, 'diff_xaxis_lines', active_graph_map['diff_xaxis_lines']),
-            (diff_xaxis_bars, 'diff_xaxis_bars', active_graph_map['diff_xaxis_bars']),
-            (x_y_scatter, 'x_y_scatter', active_graph_map['x_y_scatter']),
-            (tornado, 'tornado', active_graph_map['tornado']),
-            (macc, 'macc', active_graph_map['macc']),
-        )
+        fns_sheets_active=result_fns_sheets_active,
     )
 
     result_graphs(
@@ -73,16 +82,7 @@ def main():
         color_map=color_map,
         branch_maps=branch_maps,
         all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=(
-            (lines_over_time, 'lines_over_time', active_graph_map['lines_over_time']),
-            (bars_over_time, 'bars_over_time', active_graph_map['bars_over_time']),
-            (bars_over_scenarios, 'bars_over_scenarios', active_graph_map['bars_over_scenarios']),
-            (diff_xaxis_lines, 'diff_xaxis_lines', active_graph_map['diff_xaxis_lines']),
-            (diff_xaxis_bars, 'diff_xaxis_bars', active_graph_map['diff_xaxis_bars']),
-            (x_y_scatter, 'x_y_scatter', active_graph_map['x_y_scatter']),
-            (tornado, 'tornado', active_graph_map['tornado']),
-            (macc, 'macc', active_graph_map['macc']),
-        )
+        fns_sheets_active=result_fns_sheets_active,
     )
 
     # load shape graphs
@@ -91,11 +91,7 @@ def main():
         folder='112_31results',
         color_map=color_map,
         all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=(
-            (load_shape_area, 'load_shape_area', active_graph_map['load_shape_area']),
-            (load_shape_disaggregated, 'load_shape_disaggregated', active_graph_map['load_shape_disaggregated']),
-            (multiple_load_shapes, 'multiple_load_shapes', active_graph_map['multiple_load_shapes']),
-        ),
+        fns_sheets_active=load_fns_sheets_active,
     )
 
     load_graphs(
@@ -103,11 +99,7 @@ def main():
         folder='112_28results',
         color_map=color_map,
         all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=(
-            (load_shape_area, 'load_shape_area', active_graph_map['load_shape_area']),
-            (load_shape_disaggregated, 'load_shape_disaggregated', active_graph_map['load_shape_disaggregated']),
-            (multiple_load_shapes, 'multiple_load_shapes', active_graph_map['multiple_load_shapes']),
-        ),
+        fns_sheets_active=load_fns_sheets_active,
     )
 
 
@@ -118,6 +110,7 @@ def load_data(input_path):
     df_loads = create_scenario_copies(df_loads)
 
     return df, df_loads
+
 
 def result_graphs(df, folder, color_map, branch_maps, all_sce_group_params, fns_sheets_active):
     """
@@ -140,7 +133,7 @@ def result_graphs(df, folder, color_map, branch_maps, all_sce_group_params, fns_
 
             # make a graph for each row
             for _, row in df_graphs.iterrows():
-                if row['make_graph'] and row['folder'] == folder:
+                if (row['make_graph']) and (row['folder'] == folder):
                     fn(
                         df_in=df,
                         color_map=color_map,
@@ -170,7 +163,7 @@ def load_graphs(df, folder, color_map, all_sce_group_params, fns_sheets_active):
 
             # make a graph for each row
             for _, row in df_graphs.iterrows():
-                if row['make_graph'] and row['folder'] == folder:
+                if (row['make_graph']) and (row['folder'] == folder):
                     fn(
                         df_in=df,
                         color_map=color_map,
