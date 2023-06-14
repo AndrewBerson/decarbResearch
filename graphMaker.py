@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 # Paths
 INPUT_PATH_112_28 = Path("resultsFiles/112_28results/clean_results")
 INPUT_PATH_112_31 = Path("resultsFiles/112_31results/clean_results")
+INPUT_PATH_PROXIES = Path("resultsFiles/proxy_results/clean_results")
 CONTROLLER_PATH = Path("resultsFiles/results_controller")
 FIGURES_PATH = Path("resultsFiles/new_figures")
 
@@ -36,10 +37,18 @@ IMAGE_SCALE = 1
 
 
 def main():
-    # load data and make copies of scenarios specified in the controller
-    df_112_28, df_112_28_loads = load_data(INPUT_PATH_112_28)
-    df_112_31, df_112_31_loads = load_data(INPUT_PATH_112_31)
+    # load results and proxies
+    df_112_28 = load_results(INPUT_PATH_112_28)
+    df_112_31 = load_results(INPUT_PATH_112_31)
+    df_proxies = load_results(INPUT_PATH_PROXIES)
 
+    # combine LEAP results with proxies
+    df_112_28 = pd.concat([df_112_28, df_proxies], ignore_index=True, sort=True)
+    df_112_31 = pd.concat([df_112_31, df_proxies], ignore_index=True, sort=True)
+
+    # load load shapes
+    df_112_28_loads = load_shapes(INPUT_PATH_112_28)
+    df_112_31_loads = load_shapes(INPUT_PATH_112_31)
 
     # create color and branch maps
     color_map = load_map('color_map')
@@ -49,6 +58,7 @@ def main():
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
 
+    # tuple of tuples ((graphing function, controller sheet name, T/F if graph is active))
     result_fns_sheets_active = (
         (lines_over_time, 'lines_over_time', active_graph_map['lines_over_time']),
         (bars_over_time, 'bars_over_time', active_graph_map['bars_over_time']),
@@ -60,6 +70,7 @@ def main():
         (macc, 'macc', active_graph_map['macc']),
     )
 
+    # tuple of tuples ((graphing function, controller sheet name, T/F if graph is active))
     load_fns_sheets_active = (
         (load_shape_area, 'load_shape_area', active_graph_map['load_shape_area']),
         (load_shape_disaggregated, 'load_shape_disaggregated', active_graph_map['load_shape_disaggregated']),
@@ -67,7 +78,7 @@ def main():
     )
 
     # create result graphs
-    result_graphs(
+    make_graphs(
         df=df_112_28,
         folder='112_28results',
         color_map=color_map,
@@ -75,8 +86,7 @@ def main():
         all_sce_group_params=all_sce_group_params,
         fns_sheets_active=result_fns_sheets_active,
     )
-
-    result_graphs(
+    make_graphs(
         df=df_112_31,
         folder='112_31results',
         color_map=color_map,
@@ -86,36 +96,41 @@ def main():
     )
 
     # load shape graphs
-    load_graphs(
+    make_graphs(
         df=df_112_31_loads,
         folder='112_31results',
         color_map=color_map,
+        branch_maps=branch_maps,
         all_sce_group_params=all_sce_group_params,
         fns_sheets_active=load_fns_sheets_active,
     )
-
-    load_graphs(
+    make_graphs(
         df=df_112_28_loads,
         folder='112_28results',
         color_map=color_map,
+        branch_maps=branch_maps,
         all_sce_group_params=all_sce_group_params,
         fns_sheets_active=load_fns_sheets_active,
     )
 
 
-def load_data(input_path):
+def load_results(input_path):
     df = pd.read_csv(input_path / 'combined_results.csv', header=0, index_col=0)
     df = create_scenario_copies(df)
+    return df
+
+
+def load_shapes(input_path):
     df_loads = pd.read_csv(input_path / "shapes.csv", header=0, index_col=0)
     df_loads = create_scenario_copies(df_loads)
+    return df_loads
 
-    return df, df_loads
 
-
-def result_graphs(df, folder, color_map, branch_maps, all_sce_group_params, fns_sheets_active):
+def make_graphs(df, folder, color_map, branch_maps, all_sce_group_params, fns_sheets_active):
     """
     Function to make graphs from results
     :param df: DataFrame of results
+    :param folder: string indicating which folder the results are contained in
     :param color_map: dict of keys to hex color values
     :param branch_maps: numerous dicts of LEAP branches --> groupings
     :param all_sce_group_params: info found in tab "scenario group params" of controller
@@ -138,35 +153,6 @@ def result_graphs(df, folder, color_map, branch_maps, all_sce_group_params, fns_
                         df_in=df,
                         color_map=color_map,
                         branch_maps=branch_maps,
-                        sce_group_params=all_sce_group_params[row['group_id']],
-                        graph_params=row.to_dict(),
-                    )
-
-
-def load_graphs(df, folder, color_map, all_sce_group_params, fns_sheets_active):
-    """
-    Function to make graphs of load shapes from results
-    :param df: DataFrame of results
-    :param color_map: dict of keys to hex color values
-    :param all_sce_group_params: info found in tab "scenario group params" of controller
-    :param fns_sheets_active: tuple of tuples, where the inner tuple contains (fn, sheet name, on/off switch)
-    :return: NA
-    """
-
-    # iterate through all graphing functions
-    for fn, sheet, active in fns_sheets_active:
-        if active:
-
-            # read graph params from excel controller tab
-            df_graphs = pd.read_excel(CONTROLLER_PATH / 'controller.xlsm', sheet_name=sheet)
-            df_graphs = df_graphs.fillna('')
-
-            # make a graph for each row
-            for _, row in df_graphs.iterrows():
-                if (row['make_graph']) and (row['folder'] == folder):
-                    fn(
-                        df_in=df,
-                        color_map=color_map,
                         sce_group_params=all_sce_group_params[row['group_id']],
                         graph_params=row.to_dict(),
                     )
@@ -952,7 +938,7 @@ def form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branche
     return df_graph
 
 
-def load_shape_area(df_in, color_map, sce_group_params, graph_params):
+def load_shape_area(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     df_graph = form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branches=False)
 
@@ -970,7 +956,7 @@ def load_shape_area(df_in, color_map, sce_group_params, graph_params):
                     scale=IMAGE_SCALE)
 
 
-def load_shape_disaggregated(df_in, color_map, sce_group_params, graph_params):
+def load_shape_disaggregated(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     df_graph = form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branches=False)
 
@@ -1006,7 +992,7 @@ def load_shape_disaggregated(df_in, color_map, sce_group_params, graph_params):
                     scale=IMAGE_SCALE)
 
 
-def multiple_load_shapes(df_in, color_map, sce_group_params, graph_params):
+def multiple_load_shapes(df_in, color_map, branch_maps, sce_group_params, graph_params):
 
     df_graph = form_df_graph_load(df_in, sce_group_params, graph_params, sum_across_branches=True)
 
