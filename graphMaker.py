@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 # Paths
 INPUT_PATH_112_28 = Path("resultsFiles/112_28results/clean_results")
 INPUT_PATH_112_31 = Path("resultsFiles/112_31results/clean_results")
+INPUT_PATH_112_34 = Path("resultsFiles/112_34results/clean_results")
 INPUT_PATH_PROXIES = Path("resultsFiles/proxy_results/clean_results")
 CONTROLLER_PATH = Path("resultsFiles/results_controller")
 FIGURES_PATH = Path("resultsFiles/new_figures")
@@ -40,15 +41,18 @@ def main():
     # load results and proxies
     df_112_28 = load_results(INPUT_PATH_112_28)
     df_112_31 = load_results(INPUT_PATH_112_31)
+    df_112_34 = load_results(INPUT_PATH_112_34)
     df_proxies = load_results(INPUT_PATH_PROXIES)
 
     # combine LEAP results with proxies
-    df_112_28 = pd.concat([df_112_28, df_proxies], ignore_index=True, sort=True)
-    df_112_31 = pd.concat([df_112_31, df_proxies], ignore_index=True, sort=True)
+    df_112_28 = pd.concat([df_112_28, df_proxies], ignore_index=True, sort=True).fillna(0)
+    df_112_31 = pd.concat([df_112_31, df_proxies], ignore_index=True, sort=True).fillna(0)
+    df_112_34 = pd.concat([df_112_34, df_proxies], ignore_index=True, sort=True).fillna(0)
 
     # load load shapes
     df_112_28_loads = load_shapes(INPUT_PATH_112_28)
     df_112_31_loads = load_shapes(INPUT_PATH_112_31)
+    df_112_34_loads = load_shapes(INPUT_PATH_112_34)
 
     # create color and branch maps
     color_map = load_map('color_map')
@@ -89,6 +93,14 @@ def main():
     make_graphs(
         df=df_112_31,
         folder='112_31results',
+        color_map=color_map,
+        branch_maps=branch_maps,
+        all_sce_group_params=all_sce_group_params,
+        fns_sheets_active=result_fns_sheets_active,
+    )
+    make_graphs(
+        df=df_112_34,
+        folder='112_34results',
         color_map=color_map,
         branch_maps=branch_maps,
         all_sce_group_params=all_sce_group_params,
@@ -300,7 +312,6 @@ def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params
     :return: NA - generates a graph
     """
 
-
     if graph_params['fuel_filter'] == '':
         fuel_filter = None
     else:
@@ -383,6 +394,8 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
     if graph_params['sort_by'] != '':
         sort_by = [sort_col.strip() for sort_col in graph_params['sort_by'].split(',')]
         groupby.update(set(sort_by))
+        if graph_params['include_error_bars']:
+            groupby = set(list(groupby) + ['error_group'])
 
     df_graph = form_df_graph(
         df_in=df_in,
@@ -398,6 +411,35 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
         groupby=list(groupby)
     )
 
+    error_up_y = None
+    error_down_y = None
+    error_up_x = None
+    error_down_x = None
+    if graph_params['include_error_bars']:
+        groupby.update({'error_up', 'error_down'})
+        df_graph_error = pd.DataFrame(columns=list(groupby - set(['Scenario'])))
+        for key, dfg in df_graph.groupby('error_group'):
+            dfg = dfg.reset_index(drop=True)
+            median = dfg['Value'].median()
+            dfg['median'] = median
+            dfg['error_up'] = abs(dfg['Value'].max() - median)
+            dfg['error_down'] = abs(dfg['Value'].min() - median)
+
+            #TODO: change append to concat?
+            df_graph_error = df_graph_error.append(dfg.iloc[0, :], ignore_index=True, sort=True)
+
+        df_graph_error.drop(columns='Value', inplace=True)
+        df_graph_error.rename(columns={'median': 'Value'}, inplace=True)
+        df_graph = df_graph_error
+
+        if graph_params['xcol'] == 'Value':
+            error_up_x = 'error_up'
+            error_down_x = 'error_down'
+        else:
+            error_up_y = 'error_up'
+            error_down_y = 'error_down'
+
+
     # sort dataframe
     category_orders = dict()
     if graph_params['sort_by'] != '':
@@ -407,7 +449,6 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             category_orders = {graph_params['ycol']: df_graph[graph_params['ycol']].tolist()}
         else:
             category_orders = {graph_params['xcol']: df_graph[graph_params['xcol']].tolist()}
-
 
     # set up text annotations
     text_auto = False
@@ -423,6 +464,10 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             color=graph_params['color_col'],
             color_discrete_map=color_map,
             category_orders=category_orders,
+            error_x=error_up_x,
+            error_x_minus=error_down_x,
+            error_y=error_up_y,
+            error_y_minus=error_down_y,
         )
     else:
         fig = px.bar(
@@ -434,6 +479,10 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             barmode='group',
             color_discrete_map=color_map,
             category_orders=category_orders,
+            error_x=error_up_x,
+            error_x_minus=error_down_x,
+            error_y=error_up_y,
+            error_y_minus=error_down_y,
         )
 
     fig = update_fig_styling(fig, graph_params)
