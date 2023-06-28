@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 INPUT_PATH_112_28 = Path("resultsFiles/112_28results/clean_results")
 INPUT_PATH_112_31 = Path("resultsFiles/112_31results/clean_results")
 INPUT_PATH_112_34 = Path("resultsFiles/112_34results/clean_results")
+INPUT_PATH_112_35 = Path("resultsFiles/112_35results/clean_results")
 INPUT_PATH_PROXIES = Path("resultsFiles/proxy_results/clean_results")
 CONTROLLER_PATH = Path("resultsFiles/results_controller")
 FIGURES_PATH = Path("resultsFiles/new_figures")
@@ -38,8 +39,12 @@ IMAGE_SCALE = 1
 
 
 def main():
-    paths = [INPUT_PATH_112_28, INPUT_PATH_112_31, INPUT_PATH_112_34]
-    folder_names = ['112_28results', '112_31results', '112_34results']
+    paths_and_folder_names = (
+        (INPUT_PATH_112_28, '112_28results'),
+        (INPUT_PATH_112_31, '112_31results'),
+        (INPUT_PATH_112_34, '112_34results'),
+        (INPUT_PATH_112_35, '112_35results'),
+    )
 
     # form df of proxy results
     df_proxies = load_results(INPUT_PATH_PROXIES)
@@ -47,7 +52,9 @@ def main():
     # create color and branch maps
     color_map = load_map('color_map')
     active_graph_map = load_map('active_graph_map')
-    branch_maps = form_branch_maps(pd.concat([load_results(p) for p in paths], ignore_index=True, sort=True))
+    branch_maps = form_branch_maps(pd.concat(
+        [load_results(p) for p, _ in paths_and_folder_names], ignore_index=True, sort=True
+    ))
 
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
@@ -72,7 +79,7 @@ def main():
     )
 
     # create result graphs
-    for p, folder in zip(paths, folder_names):
+    for p, folder in paths_and_folder_names:
         df_result = pd.concat([load_results(p), df_proxies], ignore_index=True, sort=True).fillna(0)
         make_graphs(
             df=df_result,
