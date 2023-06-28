@@ -38,26 +38,16 @@ IMAGE_SCALE = 1
 
 
 def main():
-    # load results and proxies
-    df_112_28 = load_results(INPUT_PATH_112_28)
-    df_112_31 = load_results(INPUT_PATH_112_31)
-    df_112_34 = load_results(INPUT_PATH_112_34)
+    paths = [INPUT_PATH_112_28, INPUT_PATH_112_31, INPUT_PATH_112_34]
+    folder_names = ['112_28results', '112_31results', '112_34results']
+
+    # form df of proxy results
     df_proxies = load_results(INPUT_PATH_PROXIES)
-
-    # combine LEAP results with proxies
-    df_112_28 = pd.concat([df_112_28, df_proxies], ignore_index=True, sort=True).fillna(0)
-    df_112_31 = pd.concat([df_112_31, df_proxies], ignore_index=True, sort=True).fillna(0)
-    df_112_34 = pd.concat([df_112_34, df_proxies], ignore_index=True, sort=True).fillna(0)
-
-    # load load shapes
-    df_112_28_loads = load_shapes(INPUT_PATH_112_28)
-    df_112_31_loads = load_shapes(INPUT_PATH_112_31)
-    df_112_34_loads = load_shapes(INPUT_PATH_112_34)
 
     # create color and branch maps
     color_map = load_map('color_map')
     active_graph_map = load_map('active_graph_map')
-    branch_maps = form_branch_maps(pd.concat([df_112_28, df_112_31], ignore_index=True, sort=True))
+    branch_maps = form_branch_maps(pd.concat([load_results(p) for p in paths], ignore_index=True, sort=True))
 
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
@@ -82,48 +72,26 @@ def main():
     )
 
     # create result graphs
-    make_graphs(
-        df=df_112_28,
-        folder='112_28results',
-        color_map=color_map,
-        branch_maps=branch_maps,
-        all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=result_fns_sheets_active,
-    )
-    make_graphs(
-        df=df_112_31,
-        folder='112_31results',
-        color_map=color_map,
-        branch_maps=branch_maps,
-        all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=result_fns_sheets_active,
-    )
-    make_graphs(
-        df=df_112_34,
-        folder='112_34results',
-        color_map=color_map,
-        branch_maps=branch_maps,
-        all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=result_fns_sheets_active,
-    )
+    for p, folder in zip(paths, folder_names):
+        df_result = pd.concat([load_results(p), df_proxies], ignore_index=True, sort=True).fillna(0)
+        make_graphs(
+            df=df_result,
+            folder=folder,
+            color_map=color_map,
+            branch_maps=branch_maps,
+            all_sce_group_params=all_sce_group_params,
+            fns_sheets_active=result_fns_sheets_active,
+        )
 
-    # load shape graphs
-    make_graphs(
-        df=df_112_31_loads,
-        folder='112_31results',
-        color_map=color_map,
-        branch_maps=branch_maps,
-        all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=load_fns_sheets_active,
-    )
-    make_graphs(
-        df=df_112_28_loads,
-        folder='112_28results',
-        color_map=color_map,
-        branch_maps=branch_maps,
-        all_sce_group_params=all_sce_group_params,
-        fns_sheets_active=load_fns_sheets_active,
-    )
+        df_shape = load_shapes(p)
+        make_graphs(
+            df=df_shape,
+            folder=folder,
+            color_map=color_map,
+            branch_maps=branch_maps,
+            all_sce_group_params=all_sce_group_params,
+            fns_sheets_active=load_fns_sheets_active,
+        )
 
 
 def load_results(input_path):
