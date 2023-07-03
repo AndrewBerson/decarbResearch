@@ -8,7 +8,6 @@ import plotly.graph_objects as go
 # Paths
 INPUT_PATH_112_28 = Path("resultsFiles/112_28results/clean_results")
 INPUT_PATH_112_31 = Path("resultsFiles/112_31results/clean_results")
-INPUT_PATH_112_34 = Path("resultsFiles/112_34results/clean_results")
 INPUT_PATH_112_35 = Path("resultsFiles/112_35results/clean_results")
 INPUT_PATH_PROXIES = Path("resultsFiles/proxy_results/clean_results")
 CONTROLLER_PATH = Path("resultsFiles/results_controller")
@@ -42,7 +41,6 @@ def main():
     paths_and_folder_names = (
         (INPUT_PATH_112_28, '112_28results'),
         (INPUT_PATH_112_31, '112_31results'),
-        (INPUT_PATH_112_34, '112_34results'),
         (INPUT_PATH_112_35, '112_35results'),
     )
 
@@ -59,7 +57,7 @@ def main():
     # read in scenario group parameters
     _, all_sce_group_params = form_sce_group_params()
 
-    # tuple of tuples ((graphing function, controller sheet name, T/F if graph is active))
+    # results - ((graphing function, controller sheet name, T/F if graph is active))
     result_fns_sheets_active = (
         (lines_over_time, 'lines_over_time', active_graph_map['lines_over_time']),
         (bars_over_time, 'bars_over_time', active_graph_map['bars_over_time']),
@@ -71,14 +69,14 @@ def main():
         (macc, 'macc', active_graph_map['macc']),
     )
 
-    # tuple of tuples ((graphing function, controller sheet name, T/F if graph is active))
+    # load shapes - ((graphing function, controller sheet name, T/F if graph is active))
     load_fns_sheets_active = (
         (load_shape_area, 'load_shape_area', active_graph_map['load_shape_area']),
         (load_shape_disaggregated, 'load_shape_disaggregated', active_graph_map['load_shape_disaggregated']),
         (multiple_load_shapes, 'multiple_load_shapes', active_graph_map['multiple_load_shapes']),
     )
 
-    # create result graphs
+    # create result and load shape graphs
     for p, folder in paths_and_folder_names:
         df_result = pd.concat([load_results(p), df_proxies], ignore_index=True, sort=True).fillna(0)
         make_graphs(
@@ -386,6 +384,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
         groupby=list(groupby)
     )
 
+    # TODO: make defining error bars its own function
     error_up_y = None
     error_down_y = None
     error_up_x = None
@@ -401,7 +400,8 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             dfg['error_down'] = abs(dfg['Value'].min() - median)
 
             #TODO: change append to concat?
-            df_graph_error = df_graph_error.append(dfg.iloc[0, :], ignore_index=True, sort=True)
+            df_graph_error = pd.concat([df_graph_error, dfg], ignore_index=True, sort=True)
+            # df_graph_error = df_graph_error.append(dfg.iloc[0, :], ignore_index=True, sort=True)
 
         df_graph_error.drop(columns='Value', inplace=True)
         df_graph_error.rename(columns={'median': 'Value'}, inplace=True)
@@ -430,7 +430,20 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
     if graph_params['annotate']:
         text_auto = graph_params['annotation_style']
 
-    if not graph_params['grouped']:
+    if graph_params['markers_instead_of_bars']:
+        fig = px.scatter(
+            df_graph,
+            x=graph_params['xcol'],
+            y=graph_params['ycol'],
+            color=graph_params['color_col'],
+            color_discrete_map=color_map,
+            category_orders=category_orders,
+            error_x=error_up_x,
+            error_x_minus=error_down_x,
+            error_y=error_up_y,
+            error_y_minus=error_down_y,
+        )
+    elif not graph_params['grouped']:
         fig = px.bar(
             df_graph,
             x=graph_params['xcol'],
@@ -918,12 +931,12 @@ def update_fig_styling(fig, graph_params):
     if 'annotate' in graph_params:
         if graph_params['annotate']:
             fig.update_traces(
-                textfont_size=10,
+                textfont_size=14,
                 textposition=graph_params['annotation_position'],
                 textangle=graph_params['annotation_angle'],
             )
             fig.update_layout(
-                uniformtext_minsize=8,
+                uniformtext_minsize=10,
                 uniformtext_mode='hide',
             )
 
