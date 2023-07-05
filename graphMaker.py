@@ -399,9 +399,7 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
             dfg['error_up'] = abs(dfg['Value'].max() - median)
             dfg['error_down'] = abs(dfg['Value'].min() - median)
 
-            #TODO: change append to concat?
             df_graph_error = pd.concat([df_graph_error, dfg], ignore_index=True, sort=True)
-            # df_graph_error = df_graph_error.append(dfg.iloc[0, :], ignore_index=True, sort=True)
 
         df_graph_error.drop(columns='Value', inplace=True)
         df_graph_error.rename(columns={'median': 'Value'}, inplace=True)
