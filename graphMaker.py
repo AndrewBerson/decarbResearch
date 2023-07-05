@@ -9,6 +9,8 @@ import plotly.graph_objects as go
 INPUT_PATH_112_28 = Path("resultsFiles/112_28results/clean_results")
 INPUT_PATH_112_31 = Path("resultsFiles/112_31results/clean_results")
 INPUT_PATH_112_35 = Path("resultsFiles/112_35results/clean_results")
+INPUT_PATH_LeverableNotLeverable = Path("resultsFiles/Leverable_NotLeverable/clean_results")
+INPUT_PATH_112_37 = Path("resultsFiles/112_37results/clean_results")
 INPUT_PATH_PROXIES = Path("resultsFiles/proxy_results/clean_results")
 CONTROLLER_PATH = Path("resultsFiles/results_controller")
 FIGURES_PATH = Path("resultsFiles/new_figures")
@@ -42,6 +44,8 @@ def main():
         (INPUT_PATH_112_28, '112_28results'),
         (INPUT_PATH_112_31, '112_31results'),
         (INPUT_PATH_112_35, '112_35results'),
+        (INPUT_PATH_LeverableNotLeverable, 'Leverable_NotLeverable'),
+        (INPUT_PATH_112_37, '112_37results')
     )
 
     # form df of proxy results
