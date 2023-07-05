@@ -6,7 +6,7 @@ import os
 from tqdm import tqdm
 
 # Paths
-INPUT_PATH = Path("resultsFiles/may7_2023")
+INPUT_PATH = Path("resultsFiles/112_35results")
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 
 
