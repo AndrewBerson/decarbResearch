@@ -1,3 +1,3 @@
 # decarbResearch
 
-Code to evalute results from decarbonization pathways
+Code used to parse and make graphics from outputs of DECAL model

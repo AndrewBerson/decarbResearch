@@ -1,27 +1,18 @@
-import pandas as pd
 import itertools
-from pathlib import Path
 import numpy as np
+import pandas as pd
+from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
 
 # Paths
-INPUT_PATH_112_28 = Path("resultsFiles/112_28results/clean_results")
-INPUT_PATH_112_31 = Path("resultsFiles/112_31results/clean_results")
-INPUT_PATH_112_35 = Path("resultsFiles/112_35results/clean_results")
-INPUT_PATH_LeverableNotLeverable = Path("resultsFiles/Leverable_NotLeverable/clean_results")
-INPUT_PATH_112_37 = Path("resultsFiles/112_37results/clean_results")
-INPUT_PATH_PROXIES = Path("resultsFiles/proxy_results/clean_results")
 CONTROLLER_PATH = Path("resultsFiles/results_controller")
 FIGURES_PATH = Path("resultsFiles/new_figures")
 
-# Years, discount rate, capital recovery factor
+# Years and discount rate
 BASE_YEAR = 2018
 END_YEAR = 2045
-TOTAL_YEARS = END_YEAR - BASE_YEAR + 1
 DISCOUNT_RATE = 0.05
-CAPITAL_RECOVERY_FACTOR = (DISCOUNT_RATE * ((1 + DISCOUNT_RATE) ** TOTAL_YEARS)) / \
-                          (((1 + DISCOUNT_RATE) ** TOTAL_YEARS) - 1)
 
 # LEAP result strings
 EMISSIONS_RESULT_STRING = "One_Hundred Year GWP Direct At Point of Emissions"
@@ -41,15 +32,15 @@ IMAGE_SCALE = 1
 
 def main():
     paths_and_folder_names = (
-        (INPUT_PATH_112_28, '112_28results'),
-        (INPUT_PATH_112_31, '112_31results'),
-        (INPUT_PATH_112_35, '112_35results'),
-        (INPUT_PATH_LeverableNotLeverable, 'Leverable_NotLeverable'),
-        (INPUT_PATH_112_37, '112_37results')
+        (Path("resultsFiles/112_28results/clean_results"), '112_28results'),
+        (Path("resultsFiles/112_31results/clean_results"), '112_31results'),
+        (Path("resultsFiles/112_35results/clean_results"), '112_35results'),
+        (Path("resultsFiles/Leverable_NotLeverable/clean_results"), 'Leverable_NotLeverable'),
+        (Path("resultsFiles/112_37results/clean_results"), '112_37results')
     )
 
     # form df of proxy results
-    df_proxies = load_results(INPUT_PATH_PROXIES)
+    df_proxies = load_results(Path("resultsFiles/proxy_results/clean_results"))
 
     # create color and branch maps
     color_map = load_map('color_map')
@@ -1292,10 +1283,15 @@ def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
     :param relative_to_map: dict mapping scenario --> scenario it should be marginalized against
     :return: df containing col 'cost_of_abatement' for year == End year
     """
+
+    total_yrs = END_YEAR - BASE_YEAR + 1
+    capital_recovery_factor = (DISCOUNT_RATE * ((1 + DISCOUNT_RATE) ** total_yrs)) / \
+                              (((1 + DISCOUNT_RATE) ** total_yrs) - 1)
+
     df = evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(df_in, subgroup_dict, relative_to_map)
     df = df[df['Year'] == END_YEAR].copy()
-    df['annualized_cost'] = df['cumulative_marginal_cost'] * CAPITAL_RECOVERY_FACTOR
-    df['annualized_emissions_reduction'] = -1 * df['cumulative_marginal_emissions'] / TOTAL_YEARS
+    df['annualized_cost'] = df['cumulative_marginal_cost'] * capital_recovery_factor
+    df['annualized_emissions_reduction'] = -1 * df['cumulative_marginal_emissions'] / total_yrs
     df['cost_of_abatement'] = df['annualized_cost'] / df['annualized_emissions_reduction']
     df['Value'] = df['cost_of_abatement']
 

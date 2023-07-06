@@ -1,36 +1,28 @@
-import pandas as pd
 import itertools
-from pathlib import Path
 import numpy as np
 import os
+import pandas as pd
+from pathlib import Path
 from tqdm import tqdm
 
 # Paths
-INPUT_PATH = Path("resultsFiles/112_35results")
+INPUT_PATH = Path("resultsFiles/112_37results")
 CLEAN_RESULTS_PATH = INPUT_PATH / "clean_results"
 
 
 def main():
-    reload_results = True    # set to True if using a new raw results excel document
-
-    # load data and make copies of scenarios specified in the controller
-    df = load_data(reload=reload_results)
-    df_loads = load_load_shapes(reload=reload_results)
+    load_and_write_results()
+    load_and_write_load_shapes()
 
 
-def load_data(reload):
-    """ Function to load either raw or already cleaned LEAP data"""
-    if reload:
-        df = load_all_files(INPUT_PATH)    # load all raw results file from LEAP output
-        df = reformat(df)                  # cleanup up all data to preferred format
-        df.to_csv(CLEAN_RESULTS_PATH / 'combined_results.csv')
-    else:
-        df = pd.read_csv(CLEAN_RESULTS_PATH / 'combined_results.csv', header=0, index_col=0)
-
-    return df
+def load_and_write_results():
+    """ Function to generate csv of leap results """
+    df = load_all_files(INPUT_PATH, "Results")      # load all raw results file from LEAP output
+    df = reformat(df)                               # cleanup up all data to preferred format
+    df.to_csv(CLEAN_RESULTS_PATH / 'combined_results.csv')
 
 
-def load_all_files(input_path, sheet="Results"):
+def load_all_files(input_path, sheet):
     """ function to intake all raw results files within the specified path """
     df = pd.DataFrame
     added_scenarios = set()
@@ -40,7 +32,6 @@ def load_all_files(input_path, sheet="Results"):
     file_list.sort(reverse=True)
     i = 0
     for fname in file_list:
-        # print(fname)
         f = os.path.join(input_path, fname)
         if os.path.isfile(f) and (fname[0] not in [".", "~"]):
             df_excel = pd.read_excel(f, sheet_name=sheet)
@@ -119,31 +110,24 @@ def reformat(df_excel):
     return df.fillna(0)
 
 
-def load_load_shapes(reload):
-    """ Function to generate df of loadshapes """
+def load_and_write_load_shapes():
+    """ Function to generate csv of loadshapes """
+    df_excel = load_all_files(INPUT_PATH, "Shapes")
 
-    if reload:
-        df_excel = load_all_files(INPUT_PATH, "Shapes")
+    id_cols = ['Index', 'Year', 'Scenario', 'Result Variable', 'Branch']
+    hour_cols = list(set(df_excel.columns) - set(id_cols))
 
-        id_cols = ['Index', 'Year', 'Scenario', 'Result Variable', 'Branch']
-        hour_cols = list(set(df_excel.columns) - set(id_cols))
+    df = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
 
-        df = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
+    for row in tqdm(df_excel.index, 'Loading load shapes'):
+        df_to_add = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
+        df_to_add['Hour'] = pd.Series(hour_cols)
+        df_to_add['Value'] = pd.Series(df_excel.loc[row, hour_cols]).reset_index(drop=True)
+        df_to_add[['Year', 'Scenario', 'Branch', 'Result Variable']] = df_excel.loc[
+            row, ['Year', 'Scenario', 'Branch', 'Result Variable']]
+        df = pd.concat([df, df_to_add], ignore_index=True)
 
-        for row in tqdm(df_excel.index, 'Loading load shapes'):
-            df_to_add = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
-            df_to_add['Hour'] = pd.Series(hour_cols)
-            df_to_add['Value'] = pd.Series(df_excel.loc[row, hour_cols]).reset_index(drop=True)
-            df_to_add[['Year', 'Scenario', 'Branch', 'Result Variable']] = df_excel.loc[
-                row, ['Year', 'Scenario', 'Branch', 'Result Variable']]
-            df = pd.concat([df, df_to_add], ignore_index=True)
-
-        df.to_csv(CLEAN_RESULTS_PATH / "shapes.csv")
-        return df
-
-    else:
-        df = pd.read_csv(CLEAN_RESULTS_PATH / "shapes.csv", header=0, index_col=0)
-        return df
+    df.to_csv(CLEAN_RESULTS_PATH / "shapes.csv")
 
 
 if __name__ == "__main__":
