@@ -23,9 +23,9 @@ In this way, most of the data was collected in a ”bottom-up” fashion.
 The model is built using SEI’s Low Emissions Analysis Platform ([LEAP](https://leap.sei.org/)).
 
 Running experiments consists of a few different steps:
-1. Define scenarios by setting levers in master_scenarios.xlsx (not stored on github)
+1. Define scenarios by setting levers in #### **`master_scenarios.xlsx`**  (not stored on github)
     - eg: scenario A has 100% zero emission vehicle (ZEV) sales by 2035 and scenario B has 100% ZEV sales by 2045
-2. Run scenarios using DECAL
+2. Run scenarios using DECAL model (not yet publicly available)
 3. Parse DECAL output using results_parser.py
 4. Generate graphics using controller.xlsm and graph_maker.py
 
@@ -44,3 +44,5 @@ all sectors of the California economy.
 - Renewable Natural Gas (RNG) and Renewable Diesel (RD) usage may be limited by feedstock availability
 - It is very difficult to reach net-zero emissions by 2045 without significant carbon dioxide removal (CDR) 
 (>35 Mt/yr by 2045)
+
+Further preliminary results can be viewed [here](https://drive.google.com/file/d/1OParwMYAkYyiFHtbJwB7z3EGIeOMrU_a/view?usp=sharing)
