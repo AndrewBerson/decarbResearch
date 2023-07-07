@@ -4,6 +4,7 @@ import pandas as pd
 from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
+from typing import Union
 
 # Paths
 CONTROLLER_PATH = Path("resultsFiles/results_controller")
@@ -155,28 +156,43 @@ def main():
         )
 
 
-def load_results(input_path):
+def load_results(input_path: Path) -> pd.DataFrame:
+    """
+    function to load parsed results
+    :param input_path: where the results are stored
+    :return: DataFrame of results
+    """
     df = pd.read_csv(input_path / "combined_results.csv", header=0, index_col=0)
     df = create_scenario_copies(df)
     return df
 
 
-def load_shapes(input_path):
+def load_shapes(input_path: Path) -> pd.DataFrame:
+    """
+    Function to load parsed load shapes
+    :param input_path: where the results are stored
+    :return: DataFrame of load shapes
+    """
     df_loads = pd.read_csv(input_path / "shapes.csv", header=0, index_col=0)
     df_loads = create_scenario_copies(df_loads)
     return df_loads
 
 
 def make_graphs(
-    df, folder, color_map, branch_maps, all_sce_group_params, fns_sheets_active
-):
+    df: pd.DataFrame,
+    folder: str,
+    color_map: dict,
+    branch_maps: dict,
+    all_sce_group_params: dict,
+    fns_sheets_active: tuple,
+) -> None:
     """
     Function to make graphs from results
     :param df: DataFrame of results
-    :param folder: string indicating which folder the results are contained in
+    :param folder: name of folder the results are contained in (needs to align with folder col in controller)
     :param color_map: dict of keys to hex color values
     :param branch_maps: numerous dicts of LEAP branches --> groupings
-    :param all_sce_group_params: info found in tab "scenario group params" of controller
+    :param all_sce_group_params: info found in tab "scenario_group_params" of controller
     :param fns_sheets_active: tuple of tuples, where the inner tuple contains (fn, sheet name, on/off switch)
     :return: NA
     """
@@ -204,18 +220,18 @@ def make_graphs(
 
 
 def form_df_graph(
-    df_in,
-    sce_group_params,
-    result,
-    multiplier,
-    marginalize,
-    cumulative,
-    discount,
-    filter_yrs,
-    branch_map,
-    fuel_filter,
-    groupby,
-):
+    df_in: pd.DataFrame,
+    sce_group_params: dict,
+    result: list,
+    multiplier: float,
+    marginalize: bool,
+    cumulative: bool,
+    discount: bool,
+    filter_yrs: bool,
+    branch_map: dict,
+    fuel_filter: Union[list, None],
+    groupby: list,
+) -> pd.DataFrame:
     """
     Function to make dataframe for graphing according to instructions in controller
     :param df_in: DataFrame of results
@@ -293,10 +309,16 @@ def form_df_graph(
     return df_graph
 
 
-def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def lines_over_time(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
     Graph result from a single scenario over time
-    :param df_in: DataFrame of result
+    :param df_in: DataFrame of results
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
     :param sce_group_params: info from graph group in controller tab "scenario group params"
@@ -355,9 +377,15 @@ def lines_over_time(df_in, color_map, branch_maps, sce_group_params, graph_param
     )
 
 
-def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def bars_over_time(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
-    Graph result from a single scenario over time
+    Graph result from a single scenario. Can have stacked or grouped bars for each year
     :param df_in: DataFrame of result
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
@@ -442,9 +470,15 @@ def bars_over_time(df_in, color_map, branch_maps, sce_group_params, graph_params
     )
 
 
-def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def bars_over_scenarios(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
-    Graph result from a single scenario over time
+    Graph result comparing results across multiple scenarios (in a single year)
     :param df_in: DataFrame of result
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
@@ -618,9 +652,15 @@ def bars_over_scenarios(df_in, color_map, branch_maps, sce_group_params, graph_p
     )
 
 
-def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def diff_xaxis_lines(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
-    Graph result from a single scenario over time
+    Graph results from multiple scenarios where each scenario has its own x-axis value
     :param df_in: DataFrame of result
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
@@ -681,9 +721,15 @@ def diff_xaxis_lines(df_in, color_map, branch_maps, sce_group_params, graph_para
     )
 
 
-def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def diff_xaxis_bars(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
-    Graph result from a single scenario over time
+    Graph result from multiple scenarios where each scenario is a bar at a different x axis value
     :param df_in: DataFrame of result
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
@@ -752,9 +798,15 @@ def diff_xaxis_bars(df_in, color_map, branch_maps, sce_group_params, graph_param
     )
 
 
-def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def x_y_scatter(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
-    Graph result from a single scenario over time
+    Graph two results against eachother for multiple scenarios (one result on x axis, the other on y)
     :param df_in: DataFrame of result
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
@@ -826,9 +878,15 @@ def x_y_scatter(df_in, color_map, branch_maps, sce_group_params, graph_params):
     )
 
 
-def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def tornado(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
-    Graph result from a single scenario over time
+    Graph results from multiple scenarios. Multiple scenarios can form each bar in the tornado.
     :param df_in: DataFrame of result
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
@@ -970,9 +1028,15 @@ def tornado(df_in, color_map, branch_maps, sce_group_params, graph_params):
     )
 
 
-def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def macc(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
     """
-    Graph result from a single scenario over time
+    Form MACC plot
     :param df_in: DataFrame of result
     :param color_map: dict of key --> hex color codes
     :param branch_maps: maps of LEAP branches --> subgroups
@@ -1079,7 +1143,13 @@ def macc(df_in, color_map, branch_maps, sce_group_params, graph_params):
     )
 
 
-def update_fig_styling(fig, graph_params):
+def update_fig_styling(fig: go.Figure, graph_params: dict) -> go.Figure:
+    """
+    Update figure according to graph_parmas
+    :param fig: figure
+    :param graph_params: graph parameters
+    :return: figure
+    """
 
     # update title, xaxis title, and yaxis title
     fig = update_titles(
@@ -1133,8 +1203,19 @@ def update_fig_styling(fig, graph_params):
 
 
 def form_df_graph_load(
-    df_in, sce_group_params, graph_params, sum_across_branches=False
-):
+    df_in: pd.DataFrame,
+    sce_group_params: dict,
+    graph_params: dict,
+    sum_across_branches: bool = False,
+) -> pd.DataFrame:
+    """
+    Form DataFrame for load shape graphs
+    :param df_in: DataFrame of load shape results
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of controller controlling the specific graph
+    :param sum_across_branches: bool whether or not to aggregate sub-branches (eg: transport, industry...)
+    :return: DataFrame ready to be used for graphing
+    """
     # filter for relevant scenarios
     df_graph = df_in[df_in["Scenario"].isin(sce_group_params["scenarios"])].copy()
 
@@ -1165,7 +1246,22 @@ def form_df_graph_load(
     return df_graph
 
 
-def load_shape_area(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def load_shape_area(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
+    """
+    Function to make a graph of load shape that is a stacked area plot (one color per sector)
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     df_graph = form_df_graph_load(
         df_in, sce_group_params, graph_params, sum_across_branches=False
@@ -1189,8 +1285,21 @@ def load_shape_area(df_in, color_map, branch_maps, sce_group_params, graph_param
 
 
 def load_shape_disaggregated(
-    df_in, color_map, branch_maps, sce_group_params, graph_params
-):
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
+    """
+    Function to generate graph where each sector has its own line for its individual load
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     df_graph = form_df_graph_load(
         df_in, sce_group_params, graph_params, sum_across_branches=False
@@ -1235,7 +1344,22 @@ def load_shape_disaggregated(
     )
 
 
-def multiple_load_shapes(df_in, color_map, branch_maps, sce_group_params, graph_params):
+def multiple_load_shapes(
+    df_in: pd.DataFrame,
+    color_map: dict,
+    branch_maps: dict,
+    sce_group_params: dict,
+    graph_params: dict,
+) -> None:
+    """
+    Make graph with multiple load shapes compared
+    :param df_in: DataFrame of result
+    :param color_map: dict of key --> hex color codes
+    :param branch_maps: maps of LEAP branches --> subgroups
+    :param sce_group_params: info from graph group in controller tab "scenario group params"
+    :param graph_params: info from row of graphing tab of controller
+    :return: NA - generates a graph
+    """
 
     df_graph = form_df_graph_load(
         df_in, sce_group_params, graph_params, sum_across_branches=True
@@ -1257,8 +1381,14 @@ def multiple_load_shapes(df_in, color_map, branch_maps, sce_group_params, graph_
     )
 
 
-def create_scenario_copies(df):
-    """Function to create copies of specified scenarios under a new name"""
+def create_scenario_copies(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Make copies of scenarios under new name.
+    :param df: results
+    :return: results including new scenario copies
+    """
     df_excel = pd.read_excel(
         CONTROLLER_PATH / "controller.xlsm", sheet_name="scenario_copies"
     )
@@ -1276,7 +1406,16 @@ def create_scenario_copies(df):
     return remove_instate_incentives(df, sce_instate_incentive_on_off_dict)
 
 
-def remove_instate_incentives(df, scenario_dict):
+def remove_instate_incentives(
+    df: pd.DataFrame,
+    scenario_dict: dict,
+) -> pd.DataFrame:
+    """
+    Function to zero-out instate incentives from scenarios
+    :param df: results
+    :param scenario_dict: dict indicating which scenarios should have incentives removed
+    :return: updated results
+    """
     scenarios_to_remove_incentives = [
         sce for sce, on_off in scenario_dict.items() if on_off.lower() == "off"
     ]
@@ -1291,7 +1430,12 @@ def remove_instate_incentives(df, scenario_dict):
     return df
 
 
-def form_branch_maps(df_results):
+def form_branch_maps(df_results: pd.DataFrame) -> dict:
+    """
+    Function to make branch maps per branch_maps tab in controller
+    :param df_results: results (used to check if any branches are missing in controller)
+    :return: dict of branch maps
+    """
     # for set of all branches included in the results
     id_cols = ["Year", "Scenario", "Result Variable", "Fuel"]
     all_branches = set(df_results.columns) - set(id_cols)
@@ -1323,7 +1467,11 @@ def form_branch_maps(df_results):
     return branch_maps
 
 
-def form_sce_group_params():
+def form_sce_group_params() -> tuple:
+    """
+    function to make dicts of parameters associated with each scenarios within each group
+    :return: set of scenarios used, dict of parameters
+    """
     df = pd.read_excel(
         CONTROLLER_PATH / "controller.xlsm", sheet_name="scenario_group_params"
     )
@@ -1362,14 +1510,22 @@ def form_sce_group_params():
     return relevant_scenarios, sce_group_params
 
 
-def load_map(sheet_name):
-    """Function to load color map from controller"""
+def load_map(sheet_name: str) -> dict:
+    """
+    Function to create mapping based on key / value pairings in controller
+    :param sheet_name: sheet in controller
+    :return: dict of k,v per controller
+    """
     df = pd.read_excel(CONTROLLER_PATH / "controller.xlsm", sheet_name=sheet_name)
 
     return dict(zip(df["key"], df["value"]))
 
 
-def calculate_annual_result_by_subgroup(df_in, result, subgroup_dict):
+def calculate_annual_result_by_subgroup(
+    df_in: pd.DataFrame,
+    result: Union[str, list],
+    subgroup_dict: dict,
+) -> pd.DataFrame:
     """
     Function to sum the result variable in each year for the branches in each key/value pairing of subgroup dict
     :param df_in: dataframe containing all relevant results
@@ -1402,7 +1558,10 @@ def calculate_annual_result_by_subgroup(df_in, result, subgroup_dict):
     return df_out
 
 
-def marginalize_it(df_in, relative_to_dict):
+def marginalize_it(
+    df_in: pd.DataFrame,
+    relative_to_dict: dict,
+) -> pd.DataFrame:
     """
     Function to calculate marginal result
     :param df_in: Dataframe containing the following cols: Year, Scenario, Fuel, Subgroup, Value. The 'Value' column
@@ -1443,7 +1602,7 @@ def marginalize_it(df_in, relative_to_dict):
     return df_out
 
 
-def discount_it(df_in):
+def discount_it(df_in: pd.DataFrame) -> pd.DataFrame:
     """
     Function to discount all costs
     :param df_in: dataframe containing results with cols Year, Scenario, Fuel, Subgroup, Value
@@ -1467,7 +1626,7 @@ def discount_it(df_in):
     return df
 
 
-def cumsum_it(df_in):
+def cumsum_it(df_in: pd.DataFrame) -> pd.DataFrame:
     """
     Function to calculate cumulative sum of 'Value' column across years and separated by Scenario, subgroup, and fuel
     :param df_in: dataframe containing results with cols Year, Scenario, Fuel, Subgroup, Value
@@ -1487,8 +1646,10 @@ def cumsum_it(df_in):
 
 
 def evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(
-    df_in, subgroup_dict, relative_to_map
-):
+    df_in: pd.DataFrame,
+    subgroup_dict: dict,
+    relative_to_map: dict,
+) -> pd.DataFrame:
     """
     Function to evaluate cumulative marginal emissions and cumulative marginal costs
     :param df_in: raw results from LEAP script
@@ -1518,7 +1679,11 @@ def evaluate_cumulative_marginal_emissions_cumulative_marginal_cost(
     return df
 
 
-def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
+def evaluate_dollar_per_ton_abated(
+    df_in: pd.DataFrame,
+    subgroup_dict: dict,
+    relative_to_map: dict,
+) -> pd.DataFrame:
     """
     Function to evalute the cost of abatement
     :param df_in: dataframe containing results
@@ -1548,7 +1713,12 @@ def evaluate_dollar_per_ton_abated(df_in, subgroup_dict, relative_to_map):
     return df
 
 
-def update_to_load_shape_layout(fig):
+def update_to_load_shape_layout(fig: go.Figure) -> go.Figure:
+    """
+    Function to update figure to have load shape layout (months instead of years...)
+    :param fig: figure
+    :return: updated figure
+    """
     months = [
         "Jan",
         "Feb",
@@ -1583,7 +1753,12 @@ def update_to_load_shape_layout(fig):
     return fig
 
 
-def sum_load_across_branches(df_in):
+def sum_load_across_branches(df_in: pd.DataFrame) -> pd.DataFrame:
+    """
+    Function to sum electric load across branches that belong together
+    :param df_in: load shape results
+    :return: updated load shape results
+    """
     df = pd.DataFrame(columns=["Year", "Hour", "Scenario", "Result Variable", "Value"])
 
     yrs = df_in["Year"].unique()
@@ -1609,7 +1784,12 @@ def sum_load_across_branches(df_in):
     return df
 
 
-def update_titles(fig, title, xaxis_title, yaxis_title):
+def update_titles(
+    fig: go.Figure,
+    title: str,
+    xaxis_title: str,
+    yaxis_title: str,
+) -> go.Figure:
     fig.update_layout(
         title=title,
         xaxis_title=xaxis_title,
@@ -1618,7 +1798,10 @@ def update_titles(fig, title, xaxis_title, yaxis_title):
     return fig
 
 
-def place_legend_below(fig, xaxis_title):
+def place_legend_below(
+    fig: go.Figure,
+    xaxis_title: str,
+) -> go.Figure:
     if xaxis_title == "":
         y = -0.08
     else:
@@ -1637,7 +1820,10 @@ def place_legend_below(fig, xaxis_title):
     return fig
 
 
-def update_plot_size(fig, width=800, height=500):
+def update_plot_size(
+    fig: go.Figure, width: float = 800, height: float = 500
+) -> go.Figure:
+
     fig.update_layout(
         autosize=False,
         width=width,
