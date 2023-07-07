@@ -15,15 +15,17 @@ def main():
     load_and_write_load_shapes()
 
 
-def load_and_write_results():
-    """ Function to generate csv of leap results """
-    df = load_all_files(INPUT_PATH, "Results")      # load all raw results file from LEAP output
-    df = reformat(df)                               # cleanup up all data to preferred format
-    df.to_csv(CLEAN_RESULTS_PATH / 'combined_results.csv')
+def load_and_write_results() -> None:
+    """Function to generate csv of leap results"""
+    df = load_all_files(
+        INPUT_PATH, "Results"
+    )  # load all raw results file from LEAP output
+    df = reformat(df)  # cleanup up all data to preferred format
+    df.to_csv(CLEAN_RESULTS_PATH / "combined_results.csv")
 
 
-def load_all_files(input_path, sheet):
-    """ function to intake all raw results files within the specified path """
+def load_all_files(input_path: Path, sheet: str) -> pd.DataFrame:
+    """function to intake all raw results files within the specified path"""
     df = pd.DataFrame
     added_scenarios = set()
 
@@ -38,7 +40,11 @@ def load_all_files(input_path, sheet):
 
             # exclude scenarios that have already been added
             # eg: if baseline is included in multiple results files, only add it once
-            row_ids = [j for j, sce in enumerate(df_excel["Scenario"]) if sce not in added_scenarios]
+            row_ids = [
+                j
+                for j, sce in enumerate(df_excel["Scenario"])
+                if sce not in added_scenarios
+            ]
             if i == 0:
                 df = df_excel.iloc[row_ids, :].copy()
             else:
@@ -49,31 +55,34 @@ def load_all_files(input_path, sheet):
     return df.reset_index(drop=True)
 
 
-def reformat(df_excel):
-    """ Function to take LEAP script output and convert it to cleaned up long dataframe """
+def reformat(df_excel: pd.DataFrame) -> pd.DataFrame:
+    """Function to take LEAP script output and convert it to cleaned up long dataframe"""
     df_excel = df_excel.drop(columns=["Index"])
     df_excel = df_excel.transpose()
 
-    scenarios = df_excel.loc['Scenario', :].unique()
-    result_vars = df_excel.loc['Result Variable', :].unique()
-    fuels = df_excel.loc['Fuel', :].unique()
-    branches = df_excel.loc['Branch', :].unique()
+    scenarios = df_excel.loc["Scenario", :].unique()
+    result_vars = df_excel.loc["Result Variable", :].unique()
+    fuels = df_excel.loc["Fuel", :].unique()
+    branches = df_excel.loc["Branch", :].unique()
 
-    id_cols = ['Scenario', 'Result Variable', 'Fuel']
+    id_cols = ["Scenario", "Result Variable", "Fuel"]
     drop_rows = id_cols
 
-    df = pd.DataFrame(columns=['Year'] + id_cols + branches.tolist())
+    df = pd.DataFrame(columns=["Year"] + id_cols + branches.tolist())
 
     # iterate through all combinations of scenario, result and fuel
-    progress_bar = tqdm(total=len(scenarios)*len(result_vars)*len(fuels), desc='Reformatting results')
+    progress_bar = tqdm(
+        total=len(scenarios) * len(result_vars) * len(fuels),
+        desc="Reformatting results",
+    )
     for scenario, result_var, fuel in itertools.product(scenarios, result_vars, fuels):
         progress_bar.update()
 
         # find columns in df_excel that contain relevant scenario, result, and fuel
         col_mask = np.array(
-            (df_excel.loc['Scenario', :] == scenario) &
-            (df_excel.loc['Result Variable', :] == result_var) &
-            (df_excel.loc['Fuel', :] == fuel)
+            (df_excel.loc["Scenario", :] == scenario)
+            & (df_excel.loc["Result Variable", :] == result_var)
+            & (df_excel.loc["Fuel", :] == fuel)
         )
         col_ids = list(np.where(col_mask)[0])
 
@@ -88,15 +97,15 @@ def reformat(df_excel):
         df_new.drop(labels=drop_rows, axis=0, inplace=True)
 
         # set Branch as the column names instead of as the top row
-        df_new.columns = df_new.loc['Branch', :]
-        df_new.drop(labels='Branch', axis=0, inplace=True)
+        df_new.columns = df_new.loc["Branch", :]
+        df_new.drop(labels="Branch", axis=0, inplace=True)
 
         # add back in scenario, result variable, and fuel as columns
-        df_new[['Scenario', 'Result Variable', 'Fuel']] = [scenario, result_var, fuel]
+        df_new[["Scenario", "Result Variable", "Fuel"]] = [scenario, result_var, fuel]
 
         # make Year its own column
         df_new.reset_index(inplace=True)
-        df_new.rename({'index': 'Year'}, axis=1, inplace=True)
+        df_new.rename({"index": "Year"}, axis=1, inplace=True)
 
         # append new dataframe to dataframe that will ultimately be returned
         df = pd.concat([df, df_new], ignore_index=True, sort=True)
@@ -104,27 +113,34 @@ def reformat(df_excel):
     progress_bar.close()
 
     # organize columns
-    cols = ['Year'] + id_cols + list(set(df.columns) - set(id_cols + ['Year']))
+    cols = ["Year"] + id_cols + list(set(df.columns) - set(id_cols + ["Year"]))
     df = df[cols]
 
     return df.fillna(0)
 
 
-def load_and_write_load_shapes():
-    """ Function to generate csv of loadshapes """
+def load_and_write_load_shapes() -> None:
+    """Function to generate csv of loadshapes"""
     df_excel = load_all_files(INPUT_PATH, "Shapes")
 
-    id_cols = ['Index', 'Year', 'Scenario', 'Result Variable', 'Branch']
+    id_cols = ["Index", "Year", "Scenario", "Result Variable", "Branch"]
     hour_cols = list(set(df_excel.columns) - set(id_cols))
 
-    df = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
+    df = pd.DataFrame(
+        columns=["Year", "Hour", "Scenario", "Branch", "Result Variable", "Value"]
+    )
 
-    for row in tqdm(df_excel.index, 'Loading load shapes'):
-        df_to_add = pd.DataFrame(columns=['Year', 'Hour', 'Scenario', 'Branch', 'Result Variable', 'Value'])
-        df_to_add['Hour'] = pd.Series(hour_cols)
-        df_to_add['Value'] = pd.Series(df_excel.loc[row, hour_cols]).reset_index(drop=True)
-        df_to_add[['Year', 'Scenario', 'Branch', 'Result Variable']] = df_excel.loc[
-            row, ['Year', 'Scenario', 'Branch', 'Result Variable']]
+    for row in tqdm(df_excel.index, "Loading load shapes"):
+        df_to_add = pd.DataFrame(
+            columns=["Year", "Hour", "Scenario", "Branch", "Result Variable", "Value"]
+        )
+        df_to_add["Hour"] = pd.Series(hour_cols)
+        df_to_add["Value"] = pd.Series(df_excel.loc[row, hour_cols]).reset_index(
+            drop=True
+        )
+        df_to_add[["Year", "Scenario", "Branch", "Result Variable"]] = df_excel.loc[
+            row, ["Year", "Scenario", "Branch", "Result Variable"]
+        ]
         df = pd.concat([df, df_to_add], ignore_index=True)
 
     df.to_csv(CLEAN_RESULTS_PATH / "shapes.csv")
