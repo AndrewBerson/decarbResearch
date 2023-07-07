@@ -10,8 +10,6 @@ The goal of this project is to evaluate economy-wide decarbonization pathways fo
 Ultimately, we hope to illuminate what it will take to get to net-zero, as well as identify the most effective, 
 economical, and feasible pathways.
 
-![image](images/motivation_image.png)
-
 ### Method
 We have built an economy-wide decarbonization model, **DECAL** (**DE**carbonize **CAL**ifornia), 
 that evaluates emissions, costs, and resource use. 
@@ -47,4 +45,5 @@ all sectors of the California economy.
 - It is very difficult to reach net-zero emissions by 2045 without significant carbon dioxide removal (CDR) 
 (>35 Mt/yr by 2045)
 
-### [Further Results](https://drive.google.com/file/d/1OParwMYAkYyiFHtbJwB7z3EGIeOMrU_a/view?usp=sharing)
+### [Further Preliminary Results](https://drive.google.com/file/d/1OParwMYAkYyiFHtbJwB7z3EGIeOMrU_a/view?usp=sharing) 
+- All results are preliminary and subject to change
